@@ -1444,6 +1444,26 @@ and emulated (instead of failing).
 See also `ignore-unaligned-usertrap`_.
 
 
+tiocsti_restrict
+================
+
+This toggle indicates whether unprivileged users are prevented from using the
+``TIOCSTI`` ioctl to inject commands into other processes which share a tty
+session.
+
+= ============================================================================
+0 No restriction, except the default one of only being able to inject commands
+  into one's own tty.
+1 Users must have ``CAP_SYS_ADMIN`` to use the ``TIOCSTI`` ioctl.
+= ============================================================================
+
+When user namespaces are in use, the check for ``CAP_SYS_ADMIN`` is done
+against the user namespace that originally opened the tty.
+
+The kernel config option ``CONFIG_SECURITY_TIOCSTI_RESTRICT`` sets the default
+value of ``tiocsti_restrict``.
+
+
 unknown_nmi_panic
 =================
 
