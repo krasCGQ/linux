@@ -341,6 +341,7 @@ void btrfs_init_work(struct btrfs_work *work, btrfs_work_func_t uniq_func,
 	INIT_WORK(&work->normal_work, uniq_func);
 	INIT_LIST_HEAD(&work->ordered_list);
 	work->flags = 0;
+	work->wq = NULL;
 }
 
 static inline void __btrfs_queue_work(struct __btrfs_workqueue *wq,
