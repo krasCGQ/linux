@@ -2724,7 +2724,6 @@ static void btrfs_qgroup_rescan_worker(struct btrfs_work *work)
 			btrfs_end_transaction(trans);
 	}
 
-out:
 	btrfs_free_path(path);
 
 	mutex_lock(&fs_info->qgroup_rescan_lock);
@@ -2760,13 +2759,13 @@ out:
 
 	if (btrfs_fs_closing(fs_info)) {
 		btrfs_info(fs_info, "qgroup scan paused");
-	} else if (err >= 0) {
+		err = 0;
+	} else if (err >= 0)
 		btrfs_info(fs_info, "qgroup scan completed%s",
 			err > 0 ? " (inconsistency flag cleared)" : "");
-	} else {
+out:
+	if (err < 0)
 		btrfs_err(fs_info, "qgroup scan failed with %d", err);
-	}
-
 done:
 	mutex_lock(&fs_info->qgroup_rescan_lock);
 	fs_info->qgroup_rescan_running = false;
