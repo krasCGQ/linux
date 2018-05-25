@@ -1632,8 +1632,7 @@ static bool intel_edp_compare_alt_mode(struct drm_display_mode *m1,
 			m1->vdisplay == m2->vdisplay &&
 			m1->vsync_start == m2->vsync_start &&
 			m1->vsync_end == m2->vsync_end &&
-			m1->vtotal == m2->vtotal &&
-			m1->vrefresh == m2->vrefresh);
+			m1->vtotal == m2->vtotal);
 	return bres;
 }
 
