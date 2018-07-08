@@ -4,6 +4,7 @@
 
 #include <linux/types.h>
 
+struct address_space;
 struct fiemap_extent_info;
 struct inode;
 struct iov_iter;
@@ -18,6 +19,7 @@ struct vm_fault;
 #define IOMAP_DELALLOC	0x02	/* delayed allocation blocks */
 #define IOMAP_MAPPED	0x03	/* blocks allocated at @addr */
 #define IOMAP_UNWRITTEN	0x04	/* blocks allocated at @addr in unwritten state */
+#define IOMAP_INLINE	0x05	/* data inline in the inode */
 
 /*
  * Flags for all iomap mappings:
@@ -26,15 +28,19 @@ struct vm_fault;
  * written data and requires fdatasync to commit them to persistent storage.
  */
 #define IOMAP_F_NEW		0x01	/* blocks have been newly allocated */
-#define IOMAP_F_BOUNDARY	0x02	/* mapping ends at metadata boundary */
-#define IOMAP_F_DIRTY		0x04	/* uncommitted metadata */
+#define IOMAP_F_DIRTY		0x02	/* uncommitted metadata */
 
 /*
  * Flags that only need to be reported for IOMAP_REPORT requests:
  */
 #define IOMAP_F_MERGED		0x10	/* contains multiple blocks/extents */
 #define IOMAP_F_SHARED		0x20	/* block shared with another file */
-#define IOMAP_F_DATA_INLINE	0x40	/* data inline in the inode */
+
+/*
+ * Flags from 0x1000 up are for file system specific usage:
+ */
+#define IOMAP_F_PRIVATE		0x1000
+
 
 /*
  * Magic value for addr:
@@ -59,7 +65,7 @@ struct iomap {
 #define IOMAP_REPORT		(1 << 2) /* report extent status, e.g. FIEMAP */
 #define IOMAP_FAULT		(1 << 3) /* mapping for page fault */
 #define IOMAP_DIRECT		(1 << 4) /* direct I/O */
-#define IOMAP_NOWAIT		(1 << 5) /* Don't wait for writeback */
+#define IOMAP_NOWAIT		(1 << 5) /* do not block */
 
 struct iomap_ops {
 	/*
@@ -94,6 +100,8 @@ int iomap_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 loff_t iomap_seek_hole(struct inode *inode, loff_t offset,
 		const struct iomap_ops *ops);
 loff_t iomap_seek_data(struct inode *inode, loff_t offset,
+		const struct iomap_ops *ops);
+sector_t iomap_bmap(struct address_space *mapping, sector_t bno,
 		const struct iomap_ops *ops);
 
 /*
