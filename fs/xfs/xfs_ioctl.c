@@ -1,19 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2000-2005 Silicon Graphics, Inc.
  * All Rights Reserved.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it would be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write the Free Software Foundation,
- * Inc.,  51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 #include "xfs.h"
 #include "xfs_fs.h"
@@ -1828,13 +1816,13 @@ xfs_ioc_getlabel(
 	/* Paranoia */
 	BUILD_BUG_ON(sizeof(sbp->sb_fname) > FSLABEL_MAX);
 
+	/* 1 larger than sb_fname, so this ensures a trailing NUL char */
+	memset(label, 0, sizeof(label));
 	spin_lock(&mp->m_sb_lock);
-	strncpy(label, sbp->sb_fname, sizeof(sbp->sb_fname));
+	strncpy(label, sbp->sb_fname, XFSLABEL_MAX);
 	spin_unlock(&mp->m_sb_lock);
 
-	/* xfs on-disk label is 12 chars, be sure we send a null to user */
-	label[XFSLABEL_MAX] = '\0';
-	if (copy_to_user(user_label, label, sizeof(sbp->sb_fname)))
+	if (copy_to_user(user_label, label, sizeof(label)))
 		return -EFAULT;
 	return 0;
 }
@@ -1870,7 +1858,7 @@ xfs_ioc_setlabel(
 
 	spin_lock(&mp->m_sb_lock);
 	memset(sbp->sb_fname, 0, sizeof(sbp->sb_fname));
-	strncpy(sbp->sb_fname, label, sizeof(sbp->sb_fname));
+	memcpy(sbp->sb_fname, label, len);
 	spin_unlock(&mp->m_sb_lock);
 
 	/*
