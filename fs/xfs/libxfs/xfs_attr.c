@@ -320,8 +320,6 @@ xfs_attr_set(
 		 * buffer and run into problems with the write verifier.
 		 */
 		xfs_trans_bhold(args.trans, leaf_bp);
-		xfs_defer_bjoin(args.trans->t_dfops, leaf_bp);
-		xfs_defer_ijoin(args.trans->t_dfops, dp);
 		error = xfs_defer_finish(&args.trans);
 		if (error)
 			goto out;
@@ -590,10 +588,9 @@ xfs_attr_leaf_addname(
 		error = xfs_attr3_leaf_to_node(args);
 		if (error)
 			goto out_defer_cancel;
-		xfs_defer_ijoin(args->trans->t_dfops, dp);
 		error = xfs_defer_finish(&args->trans);
 		if (error)
-			goto out_defer_cancel;
+			return error;
 
 		/*
 		 * Commit the current trans (including the inode) and start
@@ -679,10 +676,9 @@ xfs_attr_leaf_addname(
 			/* bp is gone due to xfs_da_shrink_inode */
 			if (error)
 				goto out_defer_cancel;
-			xfs_defer_ijoin(args->trans->t_dfops, dp);
 			error = xfs_defer_finish(&args->trans);
 			if (error)
-				goto out_defer_cancel;
+				return error;
 		}
 
 		/*
@@ -743,10 +739,9 @@ xfs_attr_leaf_removename(
 		/* bp is gone due to xfs_da_shrink_inode */
 		if (error)
 			goto out_defer_cancel;
-		xfs_defer_ijoin(args->trans->t_dfops, dp);
 		error = xfs_defer_finish(&args->trans);
 		if (error)
-			goto out_defer_cancel;
+			return error;
 	}
 	return 0;
 out_defer_cancel:
@@ -870,10 +865,9 @@ restart:
 			error = xfs_attr3_leaf_to_node(args);
 			if (error)
 				goto out_defer_cancel;
-			xfs_defer_ijoin(args->trans->t_dfops, dp);
 			error = xfs_defer_finish(&args->trans);
 			if (error)
-				goto out_defer_cancel;
+				goto out;
 
 			/*
 			 * Commit the node conversion and start the next
@@ -895,10 +889,9 @@ restart:
 		error = xfs_da3_split(state);
 		if (error)
 			goto out_defer_cancel;
-		xfs_defer_ijoin(args->trans->t_dfops, dp);
 		error = xfs_defer_finish(&args->trans);
 		if (error)
-			goto out_defer_cancel;
+			goto out;
 	} else {
 		/*
 		 * Addition succeeded, update Btree hashvals.
@@ -992,10 +985,9 @@ restart:
 			error = xfs_da3_join(state);
 			if (error)
 				goto out_defer_cancel;
-			xfs_defer_ijoin(args->trans->t_dfops, dp);
 			error = xfs_defer_finish(&args->trans);
 			if (error)
-				goto out_defer_cancel;
+				goto out;
 		}
 
 		/*
@@ -1116,10 +1108,9 @@ xfs_attr_node_removename(
 		error = xfs_da3_join(state);
 		if (error)
 			goto out_defer_cancel;
-		xfs_defer_ijoin(args->trans->t_dfops, dp);
 		error = xfs_defer_finish(&args->trans);
 		if (error)
-			goto out_defer_cancel;
+			goto out;
 		/*
 		 * Commit the Btree join operation and start a new trans.
 		 */
@@ -1148,10 +1139,9 @@ xfs_attr_node_removename(
 			/* bp is gone due to xfs_da_shrink_inode */
 			if (error)
 				goto out_defer_cancel;
-			xfs_defer_ijoin(args->trans->t_dfops, dp);
 			error = xfs_defer_finish(&args->trans);
 			if (error)
-				goto out_defer_cancel;
+				goto out;
 		} else
 			xfs_trans_brelse(args->trans, bp);
 	}

@@ -90,20 +90,10 @@ void	xfs_log_item_init(struct xfs_mount *mp, struct xfs_log_item *item,
 #define XFS_ITEM_FLUSHING	3
 
 /*
- * Deferred operations tracking structure.
+ * Deferred operation item relogging limits.
  */
 #define XFS_DEFER_OPS_NR_INODES	2	/* join up to two inodes */
 #define XFS_DEFER_OPS_NR_BUFS	2	/* join up to two buffers */
-struct xfs_defer_ops {
-	struct list_head	dop_intake;	/* unlogged pending work */
-	struct list_head	dop_pending;	/* logged pending work */
-
-	/* relog these with each roll */
-	struct xfs_inode	*dop_inodes[XFS_DEFER_OPS_NR_INODES];
-	struct xfs_buf		*dop_bufs[XFS_DEFER_OPS_NR_BUFS];
-
-	bool			dop_low;	/* alloc in low mode */
-};
 
 /*
  * This is the structure maintained for every active transaction.
@@ -121,7 +111,6 @@ typedef struct xfs_trans {
 	struct xlog_ticket	*t_ticket;	/* log mgr ticket */
 	struct xfs_mount	*t_mountp;	/* ptr to fs mount struct */
 	struct xfs_dquot_acct   *t_dqinfo;	/* acctg info for dquots */
-	struct xfs_defer_ops	*t_dfops;	/* dfops reference */
 	int64_t			t_icount_delta;	/* superblock icount change */
 	int64_t			t_ifree_delta;	/* superblock ifree change */
 	int64_t			t_fdblocks_delta; /* superblock fdblocks chg */
@@ -143,8 +132,8 @@ typedef struct xfs_trans {
 	int64_t			t_rextslog_delta;/* superblocks rextslog chg */
 	struct list_head	t_items;	/* log item descriptors */
 	struct list_head	t_busy;		/* list of busy extents */
+	struct list_head	t_dfops;	/* deferred operations */
 	unsigned long		t_pflags;	/* saved process flags state */
-	struct xfs_defer_ops	t_dfops_internal;
 } xfs_trans_t;
 
 /*
@@ -214,9 +203,6 @@ xfs_trans_read_buf(
 				      flags, bpp, ops);
 }
 
-/* cancel dfops associated with a transaction */
-void xfs_defer_cancel(struct xfs_trans *);
-
 struct xfs_buf	*xfs_trans_getsb(xfs_trans_t *, struct xfs_mount *, int);
 
 void		xfs_trans_brelse(xfs_trans_t *, struct xfs_buf *);
@@ -277,7 +263,7 @@ void xfs_refcount_update_init_defer_op(void);
 struct xfs_cud_log_item *xfs_trans_get_cud(struct xfs_trans *tp,
 		struct xfs_cui_log_item *cuip);
 int xfs_trans_log_finish_refcount_update(struct xfs_trans *tp,
-		struct xfs_cud_log_item *cudp, struct xfs_defer_ops *dfops,
+		struct xfs_cud_log_item *cudp,
 		enum xfs_refcount_intent_type type, xfs_fsblock_t startblock,
 		xfs_extlen_t blockcount, xfs_fsblock_t *new_fsb,
 		xfs_extlen_t *new_len, struct xfs_btree_cur **pcur);
@@ -289,9 +275,9 @@ void xfs_bmap_update_init_defer_op(void);
 struct xfs_bud_log_item *xfs_trans_get_bud(struct xfs_trans *tp,
 		struct xfs_bui_log_item *buip);
 int xfs_trans_log_finish_bmap_update(struct xfs_trans *tp,
-		struct xfs_bud_log_item *rudp, struct xfs_defer_ops *dfops,
-		enum xfs_bmap_intent_type type, struct xfs_inode *ip,
-		int whichfork, xfs_fileoff_t startoff, xfs_fsblock_t startblock,
-		xfs_filblks_t *blockcount, xfs_exntst_t state);
+		struct xfs_bud_log_item *rudp, enum xfs_bmap_intent_type type,
+		struct xfs_inode *ip, int whichfork, xfs_fileoff_t startoff,
+		xfs_fsblock_t startblock, xfs_filblks_t *blockcount,
+		xfs_exntst_t state);
 
 #endif	/* __XFS_TRANS_H__ */

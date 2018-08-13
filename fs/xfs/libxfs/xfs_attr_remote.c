@@ -486,10 +486,9 @@ xfs_attr_rmtval_set(
 				  &nmap);
 		if (error)
 			goto out_defer_cancel;
-		xfs_defer_ijoin(args->trans->t_dfops, dp);
 		error = xfs_defer_finish(&args->trans);
 		if (error)
-			goto out_defer_cancel;
+			return error;
 
 		ASSERT(nmap == 1);
 		ASSERT((map.br_startblock != DELAYSTARTBLOCK) &&
@@ -627,10 +626,9 @@ xfs_attr_rmtval_remove(
 				    XFS_BMAPI_ATTRFORK, 1, &done);
 		if (error)
 			goto out_defer_cancel;
-		xfs_defer_ijoin(args->trans->t_dfops, args->dp);
 		error = xfs_defer_finish(&args->trans);
 		if (error)
-			goto out_defer_cancel;
+			return error;
 
 		/*
 		 * Close out trans and start the next one in the chain.

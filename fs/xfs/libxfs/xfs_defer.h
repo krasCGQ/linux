@@ -7,7 +7,6 @@
 #define	__XFS_DEFER_H__
 
 struct xfs_defer_op_type;
-struct xfs_defer_ops;
 
 /*
  * Save a log intent item and a list of extents, so that we can replay
@@ -25,17 +24,6 @@ struct xfs_defer_pending {
 
 /*
  * Header for deferred operation list.
- *
- * dop_low is used by the allocator to activate the lowspace algorithm -
- * when free space is running low the extent allocator may choose to
- * allocate an extent from an AG without leaving sufficient space for
- * a btree split when inserting the new extent.  In this case the allocator
- * will enable the lowspace algorithm which is supposed to allow further
- * allocations (such as btree splits and newroots) to allocate from
- * sequential AGs.  In order to avoid locking AGs out of order the lowspace
- * algorithm will start searching for free space from AG 0.  If the correct
- * transaction reservations have been made then this algorithm will eventually
- * find all the space it needs.
  */
 enum xfs_defer_ops_type {
 	XFS_DEFER_OPS_TYPE_BMAP,
@@ -46,16 +34,12 @@ enum xfs_defer_ops_type {
 	XFS_DEFER_OPS_TYPE_MAX,
 };
 
-void xfs_defer_add(struct xfs_defer_ops *dop, enum xfs_defer_ops_type type,
+void xfs_defer_add(struct xfs_trans *tp, enum xfs_defer_ops_type type,
 		struct list_head *h);
 int xfs_defer_finish_noroll(struct xfs_trans **tp);
 int xfs_defer_finish(struct xfs_trans **tp);
-void __xfs_defer_cancel(struct xfs_defer_ops *dop);
-void xfs_defer_init(struct xfs_trans *tp, struct xfs_defer_ops *dop);
-bool xfs_defer_has_unfinished_work(struct xfs_defer_ops *dop);
-int xfs_defer_ijoin(struct xfs_defer_ops *dop, struct xfs_inode *ip);
-int xfs_defer_bjoin(struct xfs_defer_ops *dop, struct xfs_buf *bp);
-void xfs_defer_move(struct xfs_defer_ops *dst, struct xfs_defer_ops *src);
+void xfs_defer_cancel(struct xfs_trans *);
+void xfs_defer_move(struct xfs_trans *dtp, struct xfs_trans *stp);
 
 /* Description of a deferred type. */
 struct xfs_defer_op_type {
@@ -63,8 +47,8 @@ struct xfs_defer_op_type {
 	unsigned int		max_items;
 	void (*abort_intent)(void *);
 	void *(*create_done)(struct xfs_trans *, void *, unsigned int);
-	int (*finish_item)(struct xfs_trans *, struct xfs_defer_ops *,
-			struct list_head *, void *, void **);
+	int (*finish_item)(struct xfs_trans *, struct list_head *, void *,
+			void **);
 	void (*finish_cleanup)(struct xfs_trans *, void *, int);
 	void (*cancel_item)(struct list_head *);
 	int (*diff_items)(void *, struct list_head *, struct list_head *);
