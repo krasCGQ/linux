@@ -24,7 +24,6 @@ struct xfs_rui_log_item;
 struct xfs_btree_cur;
 struct xfs_cui_log_item;
 struct xfs_cud_log_item;
-struct xfs_defer_ops;
 struct xfs_bui_log_item;
 struct xfs_bud_log_item;
 
@@ -90,6 +89,21 @@ void	xfs_log_item_init(struct xfs_mount *mp, struct xfs_log_item *item,
 #define XFS_ITEM_LOCKED		2
 #define XFS_ITEM_FLUSHING	3
 
+/*
+ * Deferred operations tracking structure.
+ */
+#define XFS_DEFER_OPS_NR_INODES	2	/* join up to two inodes */
+#define XFS_DEFER_OPS_NR_BUFS	2	/* join up to two buffers */
+struct xfs_defer_ops {
+	struct list_head	dop_intake;	/* unlogged pending work */
+	struct list_head	dop_pending;	/* logged pending work */
+
+	/* relog these with each roll */
+	struct xfs_inode	*dop_inodes[XFS_DEFER_OPS_NR_INODES];
+	struct xfs_buf		*dop_bufs[XFS_DEFER_OPS_NR_BUFS];
+
+	bool			dop_low;	/* alloc in low mode */
+};
 
 /*
  * This is the structure maintained for every active transaction.
@@ -102,12 +116,12 @@ typedef struct xfs_trans {
 	unsigned int		t_blk_res_used;	/* # of resvd blocks used */
 	unsigned int		t_rtx_res;	/* # of rt extents resvd */
 	unsigned int		t_rtx_res_used;	/* # of resvd rt extents used */
+	unsigned int		t_flags;	/* misc flags */
 	xfs_fsblock_t		t_firstblock;	/* first block allocated */
 	struct xlog_ticket	*t_ticket;	/* log mgr ticket */
 	struct xfs_mount	*t_mountp;	/* ptr to fs mount struct */
 	struct xfs_dquot_acct   *t_dqinfo;	/* acctg info for dquots */
 	struct xfs_defer_ops	*t_dfops;	/* dfops reference */
-	unsigned int		t_flags;	/* misc flags */
 	int64_t			t_icount_delta;	/* superblock icount change */
 	int64_t			t_ifree_delta;	/* superblock ifree change */
 	int64_t			t_fdblocks_delta; /* superblock fdblocks chg */
@@ -130,6 +144,7 @@ typedef struct xfs_trans {
 	struct list_head	t_items;	/* log item descriptors */
 	struct list_head	t_busy;		/* list of busy extents */
 	unsigned long		t_pflags;	/* saved process flags state */
+	struct xfs_defer_ops	t_dfops_internal;
 } xfs_trans_t;
 
 /*
@@ -198,6 +213,9 @@ xfs_trans_read_buf(
 	return xfs_trans_read_buf_map(mp, tp, target, &map, 1,
 				      flags, bpp, ops);
 }
+
+/* cancel dfops associated with a transaction */
+void xfs_defer_cancel(struct xfs_trans *);
 
 struct xfs_buf	*xfs_trans_getsb(xfs_trans_t *, struct xfs_mount *, int);
 

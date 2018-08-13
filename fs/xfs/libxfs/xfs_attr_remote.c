@@ -480,7 +480,6 @@ xfs_attr_rmtval_set(
 		 * extent and then crash then the block may not contain the
 		 * correct metadata after log recovery occurs.
 		 */
-		xfs_defer_init(args->trans, args->trans->t_dfops);
 		nmap = 1;
 		error = xfs_bmapi_write(args->trans, dp, (xfs_fileoff_t)lblkno,
 				  blkcnt, XFS_BMAPI_ATTRFORK, args->total, &map,
@@ -488,7 +487,7 @@ xfs_attr_rmtval_set(
 		if (error)
 			goto out_defer_cancel;
 		xfs_defer_ijoin(args->trans->t_dfops, dp);
-		error = xfs_defer_finish(&args->trans, args->trans->t_dfops);
+		error = xfs_defer_finish(&args->trans);
 		if (error)
 			goto out_defer_cancel;
 
@@ -522,7 +521,6 @@ xfs_attr_rmtval_set(
 
 		ASSERT(blkcnt > 0);
 
-		xfs_defer_init(args->trans, args->trans->t_dfops);
 		nmap = 1;
 		error = xfs_bmapi_read(dp, (xfs_fileoff_t)lblkno,
 				       blkcnt, &map, &nmap,
@@ -557,8 +555,7 @@ xfs_attr_rmtval_set(
 	ASSERT(valuelen == 0);
 	return 0;
 out_defer_cancel:
-	xfs_defer_cancel(args->trans->t_dfops);
-	args->trans = NULL;
+	xfs_defer_cancel(args->trans);
 	return error;
 }
 
@@ -626,13 +623,12 @@ xfs_attr_rmtval_remove(
 	blkcnt = args->rmtblkcnt;
 	done = 0;
 	while (!done) {
-		xfs_defer_init(args->trans, args->trans->t_dfops);
 		error = xfs_bunmapi(args->trans, args->dp, lblkno, blkcnt,
 				    XFS_BMAPI_ATTRFORK, 1, &done);
 		if (error)
 			goto out_defer_cancel;
 		xfs_defer_ijoin(args->trans->t_dfops, args->dp);
-		error = xfs_defer_finish(&args->trans, args->trans->t_dfops);
+		error = xfs_defer_finish(&args->trans);
 		if (error)
 			goto out_defer_cancel;
 
@@ -645,7 +641,6 @@ xfs_attr_rmtval_remove(
 	}
 	return 0;
 out_defer_cancel:
-	xfs_defer_cancel(args->trans->t_dfops);
-	args->trans = NULL;
+	xfs_defer_cancel(args->trans);
 	return error;
 }

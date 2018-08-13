@@ -225,9 +225,9 @@ xfs_defer_trans_abort(
 /* Roll a transaction so we can do some deferred op processing. */
 STATIC int
 xfs_defer_trans_roll(
-	struct xfs_trans		**tp,
-	struct xfs_defer_ops		*dop)
+	struct xfs_trans		**tp)
 {
+	struct xfs_defer_ops		*dop = (*tp)->t_dfops;
 	int				i;
 	int				error;
 
@@ -243,12 +243,12 @@ xfs_defer_trans_roll(
 
 	/* Roll the transaction. */
 	error = xfs_trans_roll(tp);
+	dop = (*tp)->t_dfops;
 	if (error) {
 		trace_xfs_defer_trans_roll_error((*tp)->t_mountp, dop, error);
 		xfs_defer_trans_abort(*tp, dop, error);
 		return error;
 	}
-	dop->dop_committed = true;
 
 	/* Rejoin the joined inodes. */
 	for (i = 0; i < XFS_DEFER_OPS_NR_INODES && dop->dop_inodes[i]; i++)
@@ -320,6 +320,19 @@ xfs_defer_bjoin(
 }
 
 /*
+ * Reset an already used dfops after finish.
+ */
+static void
+xfs_defer_reset(
+	struct xfs_defer_ops	*dop)
+{
+	ASSERT(!xfs_defer_has_unfinished_work(dop));
+	dop->dop_low = false;
+	memset(dop->dop_inodes, 0, sizeof(dop->dop_inodes));
+	memset(dop->dop_bufs, 0, sizeof(dop->dop_bufs));
+}
+
+/*
  * Finish all the pending work.  This involves logging intent items for
  * any work items that wandered in since the last transaction roll (if
  * one has even happened), rolling the transaction, and finishing the
@@ -328,41 +341,34 @@ xfs_defer_bjoin(
  * If an inode is provided, relog it to the new transaction.
  */
 int
-xfs_defer_finish(
-	struct xfs_trans		**tp,
-	struct xfs_defer_ops		*dop)
+xfs_defer_finish_noroll(
+	struct xfs_trans		**tp)
 {
+	struct xfs_defer_ops		*dop = (*tp)->t_dfops;
 	struct xfs_defer_pending	*dfp;
 	struct list_head		*li;
 	struct list_head		*n;
 	void				*state;
 	int				error = 0;
 	void				(*cleanup_fn)(struct xfs_trans *, void *, int);
-	struct xfs_defer_ops		*orig_dop;
 
 	ASSERT((*tp)->t_flags & XFS_TRANS_PERM_LOG_RES);
 
 	trace_xfs_defer_finish((*tp)->t_mountp, dop, _RET_IP_);
-
-	/*
-	 * Attach dfops to the transaction during deferred ops processing. This
-	 * explicitly causes calls into the allocator to defer AGFL block frees.
-	 * Note that this code can go away once all dfops users attach to the
-	 * associated tp.
-	 */
-	ASSERT(!(*tp)->t_dfops || ((*tp)->t_dfops == dop));
-	orig_dop = (*tp)->t_dfops;
-	(*tp)->t_dfops = dop;
 
 	/* Until we run out of pending work to finish... */
 	while (xfs_defer_has_unfinished_work(dop)) {
 		/* Log intents for work items sitting in the intake. */
 		xfs_defer_intake_work(*tp, dop);
 
-		/* Roll the transaction. */
-		error = xfs_defer_trans_roll(tp, dop);
+		/*
+		 * Roll the transaction and update dop in case dfops was
+		 * embedded in the transaction.
+		 */
+		error = xfs_defer_trans_roll(tp);
 		if (error)
 			goto out;
+		dop = (*tp)->t_dfops;
 
 		/* Log an intent-done item for the first pending item. */
 		dfp = list_first_entry(&dop->dop_pending,
@@ -424,26 +430,42 @@ xfs_defer_finish(
 			cleanup_fn(*tp, state, error);
 	}
 
-	/*
-	 * Roll the transaction once more to avoid returning to the caller
-	 * with a dirty transaction.
-	 */
-	if ((*tp)->t_flags & XFS_TRANS_DIRTY)
-		error = xfs_defer_trans_roll(tp, dop);
 out:
-	(*tp)->t_dfops = orig_dop;
 	if (error)
 		trace_xfs_defer_finish_error((*tp)->t_mountp, dop, error);
-	else
+	 else
 		trace_xfs_defer_finish_done((*tp)->t_mountp, dop, _RET_IP_);
+
 	return error;
+}
+
+int
+xfs_defer_finish(
+	struct xfs_trans	**tp)
+{
+	int			error;
+
+	/*
+	 * Finish and roll the transaction once more to avoid returning to the
+	 * caller with a dirty transaction.
+	 */
+	error = xfs_defer_finish_noroll(tp);
+	if (error)
+		return error;
+	if ((*tp)->t_flags & XFS_TRANS_DIRTY) {
+		error = xfs_defer_trans_roll(tp);
+		if (error)
+			return error;
+	}
+	xfs_defer_reset((*tp)->t_dfops);
+	return 0;
 }
 
 /*
  * Free up any items left in the list.
  */
 void
-xfs_defer_cancel(
+__xfs_defer_cancel(
 	struct xfs_defer_ops		*dop)
 {
 	struct xfs_defer_pending	*dfp;
@@ -543,4 +565,26 @@ xfs_defer_init(
 		mp = tp->t_mountp;
 	}
 	trace_xfs_defer_init(mp, dop, _RET_IP_);
+}
+
+/*
+ * Move state from one xfs_defer_ops to another and reset the source to initial
+ * state. This is primarily used to carry state forward across transaction rolls
+ * with internal dfops.
+ */
+void
+xfs_defer_move(
+	struct xfs_defer_ops	*dst,
+	struct xfs_defer_ops	*src)
+{
+	ASSERT(dst != src);
+
+	list_splice_init(&src->dop_intake, &dst->dop_intake);
+	list_splice_init(&src->dop_pending, &dst->dop_pending);
+
+	memcpy(dst->dop_inodes, src->dop_inodes, sizeof(dst->dop_inodes));
+	memcpy(dst->dop_bufs, src->dop_bufs, sizeof(dst->dop_bufs));
+	dst->dop_low = src->dop_low;
+
+	xfs_defer_reset(src);
 }

@@ -7,6 +7,7 @@
 #define	__XFS_DEFER_H__
 
 struct xfs_defer_op_type;
+struct xfs_defer_ops;
 
 /*
  * Save a log intent item and a list of extents, so that we can replay
@@ -45,28 +46,16 @@ enum xfs_defer_ops_type {
 	XFS_DEFER_OPS_TYPE_MAX,
 };
 
-#define XFS_DEFER_OPS_NR_INODES	2	/* join up to two inodes */
-#define XFS_DEFER_OPS_NR_BUFS	2	/* join up to two buffers */
-
-struct xfs_defer_ops {
-	bool			dop_committed;	/* did any trans commit? */
-	bool			dop_low;	/* alloc in low mode */
-	struct list_head	dop_intake;	/* unlogged pending work */
-	struct list_head	dop_pending;	/* logged pending work */
-
-	/* relog these with each roll */
-	struct xfs_inode	*dop_inodes[XFS_DEFER_OPS_NR_INODES];
-	struct xfs_buf		*dop_bufs[XFS_DEFER_OPS_NR_BUFS];
-};
-
 void xfs_defer_add(struct xfs_defer_ops *dop, enum xfs_defer_ops_type type,
 		struct list_head *h);
-int xfs_defer_finish(struct xfs_trans **tp, struct xfs_defer_ops *dop);
-void xfs_defer_cancel(struct xfs_defer_ops *dop);
+int xfs_defer_finish_noroll(struct xfs_trans **tp);
+int xfs_defer_finish(struct xfs_trans **tp);
+void __xfs_defer_cancel(struct xfs_defer_ops *dop);
 void xfs_defer_init(struct xfs_trans *tp, struct xfs_defer_ops *dop);
 bool xfs_defer_has_unfinished_work(struct xfs_defer_ops *dop);
 int xfs_defer_ijoin(struct xfs_defer_ops *dop, struct xfs_inode *ip);
 int xfs_defer_bjoin(struct xfs_defer_ops *dop, struct xfs_buf *bp);
+void xfs_defer_move(struct xfs_defer_ops *dst, struct xfs_defer_ops *src);
 
 /* Description of a deferred type. */
 struct xfs_defer_op_type {

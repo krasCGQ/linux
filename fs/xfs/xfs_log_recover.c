@@ -4854,16 +4854,10 @@ xlog_finish_defer_ops(
 			0, XFS_TRANS_RESERVE, &tp);
 	if (error)
 		return error;
-
-	error = xfs_defer_finish(&tp, dfops);
-	if (error)
-		goto out_cancel;
+	/* transfer all collected dfops to this transaction */
+	xfs_defer_move(tp->t_dfops, dfops);
 
 	return xfs_trans_commit(tp);
-
-out_cancel:
-	xfs_trans_cancel(tp);
-	return error;
 }
 
 /*
@@ -4952,7 +4946,7 @@ out:
 	xfs_trans_ail_cursor_done(&cur);
 	spin_unlock(&ailp->ail_lock);
 	if (error)
-		xfs_defer_cancel(&dfops);
+		__xfs_defer_cancel(&dfops);
 	else
 		error = xlog_finish_defer_ops(log->l_mp, &dfops);
 
@@ -5093,11 +5087,11 @@ xlog_recover_process_one_iunlink(
 	 */
 	ip->i_d.di_dmevmask = 0;
 
-	IRELE(ip);
+	xfs_irele(ip);
 	return agino;
 
  fail_iput:
-	IRELE(ip);
+	xfs_irele(ip);
  fail:
 	/*
 	 * We can't read in the inode this bucket points to, or this inode
