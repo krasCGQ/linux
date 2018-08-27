@@ -3318,7 +3318,7 @@ static void sched_tick_remote(struct work_struct *work)
 		goto out_unlock;
 
 	update_rq_clock(rq);
-	delta = rq_clock_task(rq) - curr->se.exec_start;
+	delta = rq_clock_task(rq) - curr->last_ran;
 
 	/*
 	 * Make sure the next tick runs within a reasonable
