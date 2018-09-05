@@ -222,7 +222,7 @@ extern long schedule_timeout_killable(long timeout);
 extern long schedule_timeout_uninterruptible(long timeout);
 extern long schedule_timeout_idle(long timeout);
 
-#ifdef CONFIG_HIGH_RES_TIMERS
+#if defined(CONFIG_HIGH_RES_TIMERS) && defined(CONFIG_SCHED_MUQSS)
 extern long schedule_msec_hrtimeout(long timeout);
 extern long schedule_min_hrtimeout(void);
 extern long schedule_msec_hrtimeout_interruptible(long timeout);
