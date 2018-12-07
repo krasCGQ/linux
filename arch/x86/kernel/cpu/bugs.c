@@ -574,7 +574,7 @@ static void update_stibp_strict(void)
 {
 	u64 mask = x86_spec_ctrl_base & ~SPEC_CTRL_STIBP;
 
-	if (sched_smt_active())
+	if (cpu_smt_control == CPU_SMT_ENABLED)
 		mask |= SPEC_CTRL_STIBP;
 
 	if (mask == x86_spec_ctrl_base)
@@ -589,7 +589,7 @@ static void update_stibp_strict(void)
 /* Update the static key controlling the evaluation of TIF_SPEC_IB */
 static void update_indir_branch_cond(void)
 {
-	if (sched_smt_active())
+	if (cpu_smt_control == CPU_SMT_ENABLED)
 		static_branch_enable(&switch_to_cond_stibp);
 	else
 		static_branch_disable(&switch_to_cond_stibp);
@@ -1059,14 +1059,13 @@ static ssize_t l1tf_show_state(char *buf)
 
 	if (l1tf_vmx_mitigation == VMENTER_L1D_FLUSH_EPT_DISABLED ||
 	    (l1tf_vmx_mitigation == VMENTER_L1D_FLUSH_NEVER &&
-	     sched_smt_active())) {
+	     cpu_smt_control == CPU_SMT_ENABLED))
 		return sprintf(buf, "%s; VMX: %s\n", L1TF_DEFAULT_MSG,
 			       l1tf_vmx_states[l1tf_vmx_mitigation]);
-	}
 
 	return sprintf(buf, "%s; VMX: %s, SMT %s\n", L1TF_DEFAULT_MSG,
 		       l1tf_vmx_states[l1tf_vmx_mitigation],
-		       sched_smt_active() ? "vulnerable" : "disabled");
+		       cpu_smt_control == CPU_SMT_ENABLED ? "vulnerable" : "disabled");
 }
 #else
 static ssize_t l1tf_show_state(char *buf)
