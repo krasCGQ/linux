@@ -237,7 +237,7 @@ int elevator_init(struct request_queue *q, char *name)
 		if (q->mq_ops) {
 			if (q->nr_hw_queues == 1)
 				#ifdef CONFIG_MQ_IOSCHED_BFQ
-				e = elevator_get("bfq-mq", false);
+				e = elevator_get(q, "bfq-mq", false);
 				#else
 				e = elevator_get(q, "mq-deadline", false);
 				#endif
