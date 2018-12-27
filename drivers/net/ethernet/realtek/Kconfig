@@ -111,6 +111,7 @@ config R8169
 config R8168
 	tristate "Realtek 8168 PCI-Express Gigabit Ethernet support"
 	depends on PCI
+	depends on !R8169
 	select FW_LOADER
 	select CRC32
 	select NET_CORE
