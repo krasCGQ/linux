@@ -925,8 +925,10 @@ static void bfq_updated_next_req(struct bfq_data *bfqd,
 	BUG_ON(entity->tree != &st->active);
 	BUG_ON(entity == entity->sched_data->in_service_entity);
 
-	new_budget = max_t(unsigned long, bfqq->max_budget,
-			   bfq_serv_to_charge(next_rq, bfqq));
+	new_budget = max_t(unsigned long,
+			   max_t(unsigned long, bfqq->max_budget,
+				 bfq_serv_to_charge(next_rq, bfqq)),
+			   entity->service);
 	if (entity->budget != new_budget) {
 		entity->budget = new_budget;
 		bfq_log_bfqq(bfqd, bfqq, "new budget %lu",
@@ -1444,7 +1446,15 @@ static bool bfq_bfqq_update_budg_for_activation(struct bfq_data *bfqd,
 {
 	struct bfq_entity *entity = &bfqq->entity;
 
-	if (bfq_bfqq_non_blocking_wait_rq(bfqq) && arrived_in_time) {
+	/*
+	 * In the next compound condition, we check also whether there
+	 * is some budget left, because otherwise there is no point in
+	 * trying to go on serving bfqq with this same budget: bfqq
+	 * would be expired immediately after being selected for
+	 * service. This would only cause useless overhead.
+	 */
+	if (bfq_bfqq_non_blocking_wait_rq(bfqq) && arrived_in_time &&
+	    bfq_bfqq_budget_left(bfqq) > 0) {
 		/*
 		 * We do not clear the flag non_blocking_wait_rq here, as
 		 * the latter is used in bfq_activate_bfqq to signal
