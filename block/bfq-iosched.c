@@ -3305,12 +3305,11 @@ void bfq_bfqq_expire(struct bfq_data *bfqd,
 		 * of all the outstanding requests to discover whether
 		 * the request pattern is actually isochronous.
 		 */
-		BUG_ON(bfqd->busy_queues < 1);
 		if (bfqq->dispatched == 0 &&
-		    bfqq->wr_coeff != bfqd->bfq_wr_coeff) {
+		    bfqq->wr_coeff != bfqd->bfq_wr_coeff)
 			bfqq->soft_rt_next_start =
 				bfq_bfqq_softrt_next_start(bfqd, bfqq);
-		} else {
+		else if (bfqq->dispatched > 0) {
 			/*
 			 * Schedule an update of soft_rt_next_start to when
 			 * the task may be discovered to be isochronous.
