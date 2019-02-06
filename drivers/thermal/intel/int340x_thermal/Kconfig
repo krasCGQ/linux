@@ -30,6 +30,9 @@ config ACPI_THERMAL_REL
 
 if INT340X_THERMAL
 
+config INT3402_THERMAL
+	tristate "ACPI INT3402 memory participant thermal driver"
+
 config INT3406_THERMAL
 	tristate "ACPI INT3406 display thermal driver"
 	depends on ACPI_VIDEO
