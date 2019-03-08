@@ -1027,7 +1027,7 @@ void bfq_add_bfqq_busy(struct bfq_data *bfqd, struct bfq_queue *bfqq);
 /* --------------- end of interface of B-WF2Q+ ---------------- */
 
 /* Logging facilities. */
-void bfq_pid_to_str(int pid, char *str, int len)
+static inline void bfq_pid_to_str(int pid, char *str, int len)
 {
 	if (pid != -1)
 		snprintf(str, len, "%d", pid);
