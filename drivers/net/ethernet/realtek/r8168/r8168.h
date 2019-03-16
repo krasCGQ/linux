@@ -294,9 +294,6 @@ do { \
 #define true  1
 #endif
 
-#define ENABLE_S5WOL	1
-#define CONFIG_SOC_LAN	1
-
 #ifdef RTL8168_DEBUG
 #undef RTL8168_DEBUG
 #endif
