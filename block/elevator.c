@@ -633,9 +633,7 @@ static struct elevator_type *elevator_get_default(struct request_queue *q)
 		return NULL;
 #endif
 
-#if defined(CONFIG_ZEN_INTERACTIVE) && defined(CONFIG_MQ_IOSCHED_BFQ)
-	return elevator_get(q, "bfq-mq", false);
-#elif defined(CONFIG_ZEN_INTERACTIVE) && defined(CONFIG_IOSCHED_BFQ)
+#if defined(CONFIG_ZEN_INTERACTIVE) && defined(CONFIG_IOSCHED_BFQ)
 	return elevator_get(q, "bfq", false);
 #elif defined(CONFIG_MQ_IOSCHED_DEADLINE_NODEFAULT)
 	return elevator_get(q, "mq-deadline-nodefault", false);
