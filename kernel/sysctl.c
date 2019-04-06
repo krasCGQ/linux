@@ -135,6 +135,7 @@ static int __maybe_unused one __read_only = 1;
 static int __maybe_unused two __read_only = 2;
 static int __maybe_unused four __read_only = 4;
 static unsigned long one_ul __read_only = 1;
+static unsigned long long_max = LONG_MAX;
 static int one_hundred __read_only = 100;
 static int one_thousand __read_only = 1000;
 #ifdef CONFIG_SCHED_MUQSS
@@ -1839,6 +1840,8 @@ static struct ctl_table fs_table[] = {
 		.maxlen		= sizeof(files_stat.max_files),
 		.mode		= 0644,
 		.proc_handler	= proc_doulongvec_minmax,
+		.extra1		= &zero,
+		.extra2		= &long_max,
 	},
 	{
 		.procname	= "nr_open",
