@@ -2300,6 +2300,7 @@ bool intel_sdvo_init(struct drm_i915_private *dev_priv,
 
 
 /* intel_sprite.c */
+bool is_planar_yuv_format(u32 pixelformat);
 int intel_usecs_to_scanlines(const struct drm_display_mode *adjusted_mode,
 			     int usecs);
 struct intel_plane *intel_sprite_plane_create(struct drm_i915_private *dev_priv,
@@ -2324,12 +2325,13 @@ static inline bool icl_is_nv12_y_plane(enum plane_id id)
 	return false;
 }
 
-static inline bool icl_is_hdr_plane(struct intel_plane *plane)
+static inline bool icl_is_hdr_plane(struct drm_i915_private *dev_priv,
+				    enum plane_id plane_id)
 {
-	if (INTEL_GEN(to_i915(plane->base.dev)) < 11)
+	if (INTEL_GEN(dev_priv) < 11)
 		return false;
 
-	return plane->id < PLANE_SPRITE2;
+	return plane_id < PLANE_SPRITE2;
 }
 
 /* intel_tv.c */
