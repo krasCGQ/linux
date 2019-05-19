@@ -1799,18 +1799,16 @@ config SLAB_FREELIST_HARDENED
 	  freelist exploit methods.
 
 config SLAB_HARDENED
-	default y
-	depends on SLUB
 	bool "Hardened SLAB infrastructure"
+	depends on SLUB
 	help
           Make minor performance sacrifices to harden the kernel slab
           allocator.
 
 config SLAB_CANARY
+	bool "SLAB canaries"
 	depends on SLUB
 	depends on !SLAB_MERGE_DEFAULT
-	bool "SLAB canaries"
-	default y
 	help
 	  Place canaries at the end of kernel slab allocations, sacrificing
 	  some performance and memory usage for security.
@@ -1826,7 +1824,6 @@ config SLAB_CANARY
 config SLAB_SANITIZE
 	bool "Sanitize SLAB allocations"
 	depends on SLUB
-	default y
 	help
 	  Zero fill slab allocations on free, reducing the lifetime of
 	  sensitive data and helping to mitigate use-after-free bugs.
