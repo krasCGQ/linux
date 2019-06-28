@@ -11,6 +11,7 @@ obj-$(CONFIG_FS_IOMAP)		+= iomap.o
 iomap-y				+= \
 					direct-io.o \
 					fiemap.o \
-					seek.o
+					seek.o \
+					write.o
 
 iomap-$(CONFIG_SWAP)		+= swapfile.o
