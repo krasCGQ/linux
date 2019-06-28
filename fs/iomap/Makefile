@@ -16,4 +16,5 @@ iomap-y				+= \
 					seek.o \
 					write.o
 
+iomap-$(CONFIG_MIGRATION)	+= migrate.o
 iomap-$(CONFIG_SWAP)		+= swapfile.o
