@@ -9,6 +9,7 @@ ccflags-y += -I $(srctree)/$(src)/..
 obj-$(CONFIG_FS_IOMAP)		+= iomap.o
 
 iomap-y				+= \
-					fiemap.o
+					fiemap.o \
+					seek.o
 
 iomap-$(CONFIG_SWAP)		+= swapfile.o
