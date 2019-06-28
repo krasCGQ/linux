@@ -10,7 +10,7 @@
 #include <linux/memcontrol.h>
 #include <linux/blkdev.h>
 
-#include "internal.h"
+#include "iomap_internal.h"
 
 struct iomap_page *
 iomap_page_create(struct inode *inode, struct page *page)

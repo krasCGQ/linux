@@ -9,7 +9,6 @@
 #include <linux/iomap.h>
 #include <linux/migrate.h>
 
-#include "internal.h"
 #include "iomap_internal.h"
 
 int

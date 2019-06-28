@@ -26,7 +26,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/iomap.h>
 #include <asm/pgalloc.h>
-#include "internal.h"
+#include "iomap/iomap_internal.h"
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/fs_dax.h>

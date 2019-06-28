@@ -11,7 +11,6 @@
 #include <linux/pagemap.h>
 #include <linux/blkdev.h>
 
-#include "internal.h"
 #include "iomap_internal.h"
 
 /*
