@@ -5,3 +5,7 @@
 #
 
 ccflags-y += -I $(srctree)/$(src)/..
+
+obj-$(CONFIG_FS_IOMAP)		+= iomap.o
+
+iomap-$(CONFIG_SWAP)		+= swapfile.o
