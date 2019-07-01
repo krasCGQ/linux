@@ -3543,6 +3543,9 @@ static inline struct sock *io_uring_get_socket(struct file *file)
 }
 #endif
 
+int vfs_ioc_setflags_prepare(struct inode *inode, unsigned int oldflags,
+			     unsigned int flags);
+
 extern int device_sidechannel_restrict;
 
 static inline bool is_sidechannel_device(const struct inode *inode)
