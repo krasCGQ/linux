@@ -66,7 +66,7 @@ TRACE_EVENT(xen_mc_callback,
 	    TP_PROTO(xen_mc_callback_fn_t fn, void *data),
 	    TP_ARGS(fn, data),
 	    TP_STRUCT__entry(
-		    __field(xen_mc_callback_fn_t, fn)
+		    __field(void *, fn)
 		    __field(void *, data)
 		    ),
 	    TP_fast_assign(
