@@ -264,7 +264,7 @@ static int adt7470_update_thread(void *p)
 		if (kthread_should_stop())
 			break;
 
-		schedule_timeout(msecs_to_jiffies(data->auto_update_interval));
+		schedule_msec_hrtimeout(data->auto_update_interval);
 	}
 
 	return 0;

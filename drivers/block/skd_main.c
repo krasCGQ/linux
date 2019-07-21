@@ -2237,7 +2237,7 @@ stop_out:
 		if (dev_state == FIT_SR_DRIVE_INIT)
 			break;
 		set_current_state(TASK_INTERRUPTIBLE);
-		schedule_timeout(msecs_to_jiffies(100));
+		schedule_msec_hrtimeout(100);
 	}
 
 	if (dev_state != FIT_SR_DRIVE_INIT)

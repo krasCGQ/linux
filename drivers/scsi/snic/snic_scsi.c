@@ -1890,7 +1890,7 @@ snic_dr_clean_pending_req(struct snic *snic, struct scsi_cmnd *lr_sc)
 		}
 	}
 
-	schedule_timeout(msecs_to_jiffies(100));
+	schedule_msec_hrtimeout(100);
 
 	/* Walk through all the cmds and check abts status. */
 	if (snic_is_abts_pending(snic, lr_sc)) {

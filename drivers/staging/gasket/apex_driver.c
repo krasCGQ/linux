@@ -614,7 +614,7 @@ static int apex_pci_probe(struct pci_dev *pci_dev,
 					   APEX_BAR2_REG_KERNEL_HIB_MSIX_TABLE_INIT);
 		if (page_table_ready && msix_table_ready)
 			break;
-		schedule_timeout(msecs_to_jiffies(APEX_RESET_DELAY));
+		schedule_msec_hrtimeout(APEX_RESET_DELAY);
 		retries++;
 	}
 

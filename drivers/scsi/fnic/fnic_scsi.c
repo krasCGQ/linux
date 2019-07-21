@@ -2672,7 +2672,7 @@ retry_fw_reset:
 	if (unlikely(fnic->state == FNIC_IN_FC_TRANS_ETH_MODE)) {
 		/* fw reset is in progress, poll for its completion */
 		spin_unlock_irqrestore(&fnic->fnic_lock, flags);
-		schedule_timeout(msecs_to_jiffies(100));
+		schedule_msec_hrtimeout(100);
 		goto retry_fw_reset;
 	}
 
@@ -2721,7 +2721,7 @@ retry_fw_reset:
 	if (unlikely(fnic->state == FNIC_IN_FC_TRANS_ETH_MODE)) {
 		/* fw reset is in progress, poll for its completion */
 		spin_unlock_irqrestore(&fnic->fnic_lock, flags);
-		schedule_timeout(msecs_to_jiffies(100));
+		schedule_msec_hrtimeout(100);
 		goto retry_fw_reset;
 	}
 	old_state = fnic->state;

@@ -1159,7 +1159,7 @@ retry:
 	if (creds < window->wcreds_max) {
 		val = 0;
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		schedule_timeout(msecs_to_jiffies(10));
+		schedule_msec_hrtimeout(10);
 		goto retry;
 	}
 }
@@ -1180,7 +1180,7 @@ retry:
 	if (busy) {
 		val = 0;
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		schedule_timeout(msecs_to_jiffies(5));
+		schedule_msec_hrtimeout(5);
 		goto retry;
 	}
 }

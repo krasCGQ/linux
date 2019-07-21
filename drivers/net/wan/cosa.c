@@ -503,7 +503,7 @@ static int cosa_probe(int base, int irq, int dma)
 		 */
 		set_current_state(TASK_INTERRUPTIBLE);
 		cosa_putstatus(cosa, SR_TX_INT_ENA);
-		schedule_timeout(msecs_to_jiffies(300));
+		schedule_msec_hrtimeout(300);
 		irq = probe_irq_off(irqs);
 		/* Disable all IRQs from the card */
 		cosa_putstatus(cosa, 0);
