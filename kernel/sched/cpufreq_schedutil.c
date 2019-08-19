@@ -306,7 +306,7 @@ static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 #else /* CONFIG_SCHED_BMQ */
 static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 {
-	sg_cpu->max = arch_scale_cpu_capacity(NULL, sg_cpu->cpu);
+	sg_cpu->max = arch_scale_cpu_capacity(sg_cpu->cpu);
 	return sg_cpu->max;
 }
 #endif
