@@ -2,6 +2,10 @@
 /*
  * Scheduler internal types and methods:
  */
+#ifdef CONFIG_SCHED_BMQ
+#include "bmq_sched.h"
+#else
+
 #include <linux/sched.h>
 
 #include <linux/sched/autogroup.h>
@@ -2533,18 +2537,11 @@ static inline void membarrier_switch_mm(struct rq *rq,
 }
 #endif
 
-#ifdef CONFIG_SMP
-static inline bool is_per_cpu_kthread(struct task_struct *p)
-{
-	if (!(p->flags & PF_KTHREAD))
-		return false;
-
-	if (p->nr_cpus_allowed != 1)
-		return false;
-
-	return true;
-}
-#endif
-
 void swake_up_all_locked(struct swait_queue_head *q);
 void __prepare_to_swait(struct swait_queue_head *q, struct swait_queue *wait);
+
+static inline int task_running_nice(struct task_struct *p)
+{
+	return (task_nice(p) > 0);
+}
+#endif /* !CONFIG_SCHED_BMQ */
