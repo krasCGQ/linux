@@ -12,6 +12,7 @@ no_dumpfile	= true
 do_tools_usbip	= true
 do_tools_cpupower = true
 do_tools_perf	= true
+do_tools_bpftool = true
 do_tools_x86	= true
 do_tools_hyperv	= false
 do_extras_package = false
