@@ -24,5 +24,4 @@ do_doc_package	= false
 do_source_package = false
 do_dtbs		= false
 do_common_headers_indep = false
-do_dkms_nvidia	= true
 do_dkms_vbox	= true
