@@ -288,6 +288,8 @@ pvpanic
 qnx4
 qnx6
 quota_tree
+quota_v1
+quota_v2
 raid6_pq
 reiserfs
 romfs
