@@ -313,6 +313,8 @@ sunrpc
 sysv
 tap
 target_core_mod
+test_blackhole_dev
+test_bpf
 ts_bm
 ts_fsm
 ts_kmp
