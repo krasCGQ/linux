@@ -6579,6 +6579,8 @@ EXPORT_SYMBOL_GPL vmlinux 0x00000000	cpu_has_xfeatures
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	cpu_hotplug_disable
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	cpu_hotplug_enable
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	cpu_is_hotpluggable
+EXPORT_SYMBOL_GPL vmlinux 0x00000000	cpu_mitigations_auto_nosmt
+EXPORT_SYMBOL_GPL vmlinux 0x00000000	cpu_mitigations_off
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	cpu_subsys
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	cpu_up
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	cpuacct_cgrp_subsys_enabled_key
@@ -7658,6 +7660,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x00000000	iscsi_unregister_transport
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	iscsi_update_cmdsn
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	iscsi_verify_itt
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	iterate_mounts
+EXPORT_SYMBOL_GPL vmlinux 0x00000000	itlb_multihit_kvm_mitigation
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	kern_mount
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	kernel_fpu_begin
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	kernel_fpu_end
