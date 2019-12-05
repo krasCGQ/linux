@@ -8228,6 +8228,7 @@ EXPORT_SYMBOL_GPL vmlinux 0x00000000	pci_load_and_free_saved_state
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	pci_load_saved_state
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	pci_lock_rescan_remove
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	pci_power_names
+EXPORT_SYMBOL_GPL vmlinux 0x00000000	pci_pr3_present
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	pci_probe_reset_bus
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	pci_probe_reset_slot
 EXPORT_SYMBOL_GPL vmlinux 0x00000000	pci_remove_root_bus
