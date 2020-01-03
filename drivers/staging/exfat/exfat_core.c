@@ -610,11 +610,11 @@ s32 clr_alloc_bitmap(struct super_block *sb, u32 clu)
 {
 	int i, b;
 	sector_t sector;
-#ifdef CONFIG_EXFAT_DISCARD
+#ifdef CONFIG_STAGING_EXFAT_DISCARD
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	struct exfat_mount_options *opts = &sbi->options;
 	int ret;
-#endif /* CONFIG_EXFAT_DISCARD */
+#endif /* CONFIG_STAGING_EXFAT_DISCARD */
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
 	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
 
@@ -627,7 +627,7 @@ s32 clr_alloc_bitmap(struct super_block *sb, u32 clu)
 
 	return sector_write(sb, sector, p_fs->vol_amap[i], 0);
 
-#ifdef CONFIG_EXFAT_DISCARD
+#ifdef CONFIG_STAGING_EXFAT_DISCARD
 	if (opts->discard) {
 		ret = sb_issue_discard(sb, START_SECTOR(clu),
 				       (1 << p_fs->sectors_per_clu_bits),
@@ -637,7 +637,7 @@ s32 clr_alloc_bitmap(struct super_block *sb, u32 clu)
 			opts->discard = 0;
 		}
 	}
-#endif /* CONFIG_EXFAT_DISCARD */
+#endif /* CONFIG_STAGING_EXFAT_DISCARD */
 }
 
 u32 test_alloc_bitmap(struct super_block *sb, u32 clu)

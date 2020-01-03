@@ -35,13 +35,13 @@ int bdev_read(struct super_block *sb, sector_t secno, struct buffer_head **bh,
 {
 	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
-#ifdef CONFIG_EXFAT_KERNEL_DEBUG
+#ifdef CONFIG_STAGING_EXFAT_KERNEL_DEBUG
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	long flags = sbi->debug_flags;
 
 	if (flags & EXFAT_DEBUGFLAGS_ERROR_RW)
 		return FFS_MEDIAERR;
-#endif /* CONFIG_EXFAT_KERNEL_DEBUG */
+#endif /* CONFIG_STAGING_EXFAT_KERNEL_DEBUG */
 
 	if (!p_bd->opened)
 		return FFS_MEDIAERR;
@@ -72,13 +72,13 @@ int bdev_write(struct super_block *sb, sector_t secno, struct buffer_head *bh,
 	struct buffer_head *bh2;
 	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
 	struct fs_info_t *p_fs = &(EXFAT_SB(sb)->fs_info);
-#ifdef CONFIG_EXFAT_KERNEL_DEBUG
+#ifdef CONFIG_STAGING_EXFAT_KERNEL_DEBUG
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	long flags = sbi->debug_flags;
 
 	if (flags & EXFAT_DEBUGFLAGS_ERROR_RW)
 		return FFS_MEDIAERR;
-#endif /* CONFIG_EXFAT_KERNEL_DEBUG */
+#endif /* CONFIG_STAGING_EXFAT_KERNEL_DEBUG */
 
 	if (!p_bd->opened)
 		return FFS_MEDIAERR;
@@ -121,13 +121,13 @@ no_bh:
 int bdev_sync(struct super_block *sb)
 {
 	struct bd_info_t *p_bd = &(EXFAT_SB(sb)->bd_info);
-#ifdef CONFIG_EXFAT_KERNEL_DEBUG
+#ifdef CONFIG_STAGING_EXFAT_KERNEL_DEBUG
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	long flags = sbi->debug_flags;
 
 	if (flags & EXFAT_DEBUGFLAGS_ERROR_RW)
 		return FFS_MEDIAERR;
-#endif /* CONFIG_EXFAT_KERNEL_DEBUG */
+#endif /* CONFIG_STAGING_EXFAT_KERNEL_DEBUG */
 
 	if (!p_bd->opened)
 		return FFS_MEDIAERR;
