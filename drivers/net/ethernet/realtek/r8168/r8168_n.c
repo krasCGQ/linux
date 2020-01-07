@@ -56,7 +56,7 @@
 #include <linux/rtnetlink.h>
 #include <linux/completion.h>
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,26) && LINUX_VERSION_CODE < KERNEL_VERSION(5,4,0)
 #include <linux/pci-aspm.h>
 #endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,4,37)
