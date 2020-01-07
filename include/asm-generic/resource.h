@@ -5,6 +5,12 @@
 #include <uapi/asm-generic/resource.h>
 
 
+#ifdef CONFIG_SCHED_BMQ
+#define RLIM_NICE 30
+#else
+#define RLIM_NICE 0
+#endif
+
 /*
  * boot-time rlimit defaults for the init task:
  */
@@ -23,7 +29,7 @@
 	[RLIMIT_LOCKS]		= {  RLIM_INFINITY,  RLIM_INFINITY },	\
 	[RLIMIT_SIGPENDING]	= { 		0,	       0 },	\
 	[RLIMIT_MSGQUEUE]	= {   MQ_BYTES_MAX,   MQ_BYTES_MAX },	\
-	[RLIMIT_NICE]		= { 30, 30 },				\
+	[RLIMIT_NICE]		= {      RLIM_NICE,      RLIM_NICE },	\
 	[RLIMIT_RTPRIO]		= { 0, 0 },				\
 	[RLIMIT_RTTIME]		= {  RLIM_INFINITY,  RLIM_INFINITY },	\
 }
