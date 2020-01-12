@@ -478,7 +478,7 @@ static inline void *restore_red_left(struct kmem_cache *s, void *p)
 #if defined(CONFIG_SLUB_DEBUG_ON)
 static slab_flags_t slub_debug = DEBUG_DEFAULT_FLAGS;
 #else
-static slab_flags_t slub_debug;
+static slab_flags_t slub_debug = SLAB_POISON;
 #endif
 
 static char *slub_debug_slabs;

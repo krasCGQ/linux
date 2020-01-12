@@ -8,7 +8,7 @@
 #include <linux/ratelimit.h>
 #include <linux/kasan.h>
 
-static bool want_page_poisoning __read_mostly;
+static bool want_page_poisoning __read_mostly = 1;
 
 static int __init early_page_poison_param(char *buf)
 {
