@@ -81,8 +81,8 @@ void __init pti_check_boottime_disable(void)
 	char arg[5];
 	int ret;
 
-	/* Assume mode is auto unless overridden. */
-	pti_mode = PTI_AUTO;
+	/* Assume mode is force on unless overridden. */
+	pti_mode = PTI_FORCE_ON;
 
 	if (hypervisor_is_type(X86_HYPER_XEN_PV)) {
 		pti_mode = PTI_FORCE_OFF;
