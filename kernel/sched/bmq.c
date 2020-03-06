@@ -796,20 +796,24 @@ void set_cpu_sd_state_idle(void) {}
  */
 int get_nohz_timer_target(void)
 {
-	int i, cpu = smp_processor_id();
+	int i, cpu = smp_processor_id(), default_cpu = -1;
 	struct cpumask *mask;
 
-	if (!idle_cpu(cpu) && housekeeping_cpu(cpu, HK_FLAG_TIMER))
-		return cpu;
+	if (housekeeping_cpu(cpu, HK_FLAG_TIMER)) {
+		if (!idle_cpu(cpu))
+			return cpu;
+		default_cpu = cpu;
+	}
 
 	for (mask = &(per_cpu(sched_cpu_affinity_masks, cpu)[0]);
 	     mask < per_cpu(sched_cpu_affinity_end_mask, cpu); mask++)
-		for_each_cpu(i, mask)
-			if (!idle_cpu(i) && housekeeping_cpu(i, HK_FLAG_TIMER))
+		for_each_cpu_and(i, mask, housekeeping_cpumask(HK_FLAG_TIMER))
+			if (!idle_cpu(i))
 				return i;
 
-	if (!housekeeping_cpu(cpu, HK_FLAG_TIMER))
-		cpu = housekeeping_any_cpu(HK_FLAG_TIMER);
+	if (default_cpu == -1)
+		default_cpu = housekeeping_any_cpu(HK_FLAG_TIMER);
+	cpu = default_cpu;
 
 	return cpu;
 }
