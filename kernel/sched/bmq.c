@@ -2991,10 +2991,10 @@ static void sched_tick_remote(struct work_struct *work)
 
 	raw_spin_lock_irqsave(&rq->lock, flags);
 	curr = rq->curr;
-
 	if (cpu_is_offline(cpu))
 		goto out_unlock;
 
+	curr = rq->curr;
 	update_rq_clock(rq);
 	if (!is_idle_task(curr)) {
 		/*
@@ -3006,6 +3006,7 @@ static void sched_tick_remote(struct work_struct *work)
 	}
 	scheduler_task_tick(rq);
 
+	calc_load_nohz_remote(rq);
 out_unlock:
 	raw_spin_unlock_irqrestore(&rq->lock, flags);
 
