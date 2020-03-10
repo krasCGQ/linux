@@ -85,7 +85,8 @@ struct rq {
 	/* runqueue lock: */
 	raw_spinlock_t lock;
 
-	struct task_struct *curr, *idle, *stop, *skip;
+	struct task_struct __rcu *curr;
+	struct task_struct *idle, *stop, *skip;
 	struct mm_struct *prev_mm;
 
 	struct bmq queue;
