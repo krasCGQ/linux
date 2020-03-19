@@ -147,17 +147,9 @@ DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 static cpumask_t sched_sg_idle_mask ____cacheline_aligned_in_smp;
 static cpumask_t sched_rq_watermark[bmq_BITS] ____cacheline_aligned_in_smp;
 
-#if (bmq_BITS <= BITS_PER_LONG)
-#define bmq_find_first_bit(bm)		__ffs((bm[0]))
-#define bmq_find_next_bit(bm, start)	__ffs(BITMAP_FIRST_WORD_MASK(start) & bm[0])
-#else
-#define bmq_find_first_bit(bm)		find_first_bit((bm), bmq_BITS)
-#define bmq_find_next_bit(bm, start)	find_next_bit(bm, bmq_BITS, start)
-#endif
-
 static inline void update_sched_rq_watermark(struct rq *rq)
 {
-	unsigned long watermark = bmq_find_first_bit(rq->queue.bitmap);
+	unsigned long watermark = find_first_bit(rq->queue.bitmap, bmq_BITS);
 	unsigned long last_wm = rq->watermark;
 	unsigned long i;
 	int cpu;
@@ -198,7 +190,7 @@ static inline void update_sched_rq_watermark(struct rq *rq)
 
 static inline int task_sched_prio(struct task_struct *p)
 {
-	return (p->prio < MAX_RT_PRIO)? 0:p->prio - MAX_RT_PRIO + p->boost_prio + 1;
+	return (p->prio < MAX_RT_PRIO)? p->prio : p->prio + p->boost_prio;
 }
 
 static inline void bmq_init(struct bmq *q)
@@ -217,27 +209,12 @@ static inline void bmq_init_idle(struct bmq *q, struct task_struct *idle)
 	set_bit(IDLE_TASK_SCHED_PRIO, q->bitmap);
 }
 
-static inline void bmq_add_task(struct task_struct *p, struct bmq *q, int idx)
-{
-	struct list_head *n;
-
-	if (likely(idx)) {
-		list_add_tail(&p->bmq_node, &q->heads[idx]);
-		return;
-	}
-
-	list_for_each(n, &q->heads[idx])
-		if (list_entry(n, struct task_struct, bmq_node)->prio > p->prio)
-			break;
-	__list_add(&p->bmq_node, n->prev, n);
-}
-
 /*
  * This routine used in bmq scheduler only which assume the idle task in the bmq
  */
 static inline struct task_struct *rq_first_bmq_task(struct rq *rq)
 {
-	unsigned long idx = bmq_find_first_bit(rq->queue.bitmap);
+	unsigned long idx = find_first_bit(rq->queue.bitmap, bmq_BITS);
 	const struct list_head *head = &rq->queue.heads[idx];
 
 	return list_first_entry(head, struct task_struct, bmq_node);
@@ -250,7 +227,7 @@ rq_next_bmq_task(struct task_struct *p, struct rq *rq)
 	struct list_head *head = &rq->queue.heads[idx];
 
 	if (list_is_last(&p->bmq_node, head)) {
-		idx = bmq_find_next_bit(rq->queue.bitmap, idx + 1);
+		idx = find_next_bit(rq->queue.bitmap, bmq_BITS, idx + 1);
 		head = &rq->queue.heads[idx];
 
 		return list_first_entry(head, struct task_struct, bmq_node);
@@ -535,7 +512,7 @@ static inline void enqueue_task(struct task_struct *p, struct rq *rq, int flags)
 		  task_cpu(p), cpu_of(rq));
 
 	p->bmq_idx = task_sched_prio(p);
-	bmq_add_task(p, &rq->queue, p->bmq_idx);
+	list_add_tail(&p->bmq_node, &rq->queue.heads[p->bmq_idx]);
 	set_bit(p->bmq_idx, rq->queue.bitmap);
 	update_sched_rq_watermark(rq);
 	++rq->nr_running;
@@ -567,7 +544,7 @@ static inline void requeue_task(struct task_struct *p, struct rq *rq)
 		  cpu_of(rq), task_cpu(p));
 
 	list_del(&p->bmq_node);
-	bmq_add_task(p, &rq->queue, idx);
+	list_add_tail(&p->bmq_node, &rq->queue.heads[idx]);
 	if (idx != p->bmq_idx) {
 		if (list_empty(&rq->queue.heads[p->bmq_idx]))
 			clear_bit(p->bmq_idx, rq->queue.bitmap);
