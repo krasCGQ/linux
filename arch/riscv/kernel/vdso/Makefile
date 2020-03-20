@@ -54,8 +54,9 @@ $(obj)/%.so: $(obj)/%.so.dbg FORCE
 # The DSO images are built using a special linker script
 # Add -lgcc so rv32 gets static muldi3 and lshrdi3 definitions.
 # Make sure only to export the intended __vdso_xxx symbol offsets.
+no-pie-$(CONFIG_CC_IS_GCC) := $(call cc-option, -no-pie)
 quiet_cmd_vdsold = VDSOLD  $@
-      cmd_vdsold = $(CC) $(KBUILD_CFLAGS) $(call cc-option, -no-pie) -nostdlib -nostartfiles $(SYSCFLAGS_$(@F)) \
+      cmd_vdsold = $(CC) $(KBUILD_CFLAGS) $(no-pie-y) -nostdlib -nostartfiles $(SYSCFLAGS_$(@F)) \
                            -Wl,-T,$(filter-out FORCE,$^) -o $@.tmp && \
                    $(CROSS_COMPILE)objcopy \
                            $(patsubst %, -G __vdso_%, $(vdso-syms)) $@.tmp $@ && \
