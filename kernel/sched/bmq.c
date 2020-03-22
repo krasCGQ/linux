@@ -3311,21 +3311,6 @@ choose_next_task(struct rq *rq, int cpu, struct task_struct *prev)
 	return next;
 }
 
-static inline void set_rq_task(struct rq *rq, struct task_struct *p)
-{
-	p->last_ran = rq->clock_task;
-
-	if (unlikely(sched_timeslice_ns == p->time_slice))
-		rq->last_ts_switch = rq->clock;
-
-	if (p == rq->idle)
-		schedstat_inc(rq->sched_goidle);
-#ifdef CONFIG_HIGH_RES_TIMERS
-	else
-		hrtick_start(rq, p->time_slice);
-#endif
-}
-
 /*
  * schedule() is the main scheduler function.
  *
@@ -3421,9 +3406,17 @@ static void __sched notrace __schedule(bool preempt)
 
 	next = choose_next_task(rq, cpu, prev);
 
-	set_rq_task(rq, next);
+	if (next == rq->idle)
+		schedstat_inc(rq->sched_goidle);
+#ifdef CONFIG_HIGH_RES_TIMERS
+	else
+		hrtick_start(rq, next->time_slice);
+#endif
 
 	if (prev != next) {
+		next->last_ran = rq->clock_task;
+		rq->last_ts_switch = rq->clock;
+
 		rq->nr_switches++;
 		/*
 		 * RCU users of rcu_dereference(rq->curr) may not see
@@ -3445,7 +3438,6 @@ static void __sched notrace __schedule(bool preempt)
 		 *   is a RELEASE barrier),
 		 */
 		++*switch_count;
-		rq->last_ts_switch = rq->clock;
 
 		trace_sched_switch(preempt, prev, next);
 
