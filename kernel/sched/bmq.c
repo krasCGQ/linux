@@ -1956,7 +1956,7 @@ static int try_to_wake_up(struct task_struct *p, unsigned int state,
 		atomic_dec(&task_rq(p)->nr_iowait);
 	}
 
-	if(cpu_rq(smp_processor_id())->clock - p->last_ran > sched_timeslice_ns)
+	if(this_rq()->clock_task - p->last_ran > sched_timeslice_ns)
 		boost_task(p);
 
 	cpu = select_task_rq(p);
