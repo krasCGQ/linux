@@ -3273,7 +3273,7 @@ static inline int take_other_rq_tasks(struct rq *rq, int cpu)
  */
 static inline void check_curr(struct task_struct *p, struct rq *rq)
 {
-	if (rq->idle == p)
+	if (unlikely(rq->idle == p))
 		return;
 
 	update_curr(rq, p);
@@ -3413,7 +3413,7 @@ static void __sched notrace __schedule(bool preempt)
 		hrtick_start(rq, next->time_slice);
 #endif
 
-	if (prev != next) {
+	if (likely(prev != next)) {
 		next->last_ran = rq->clock_task;
 		rq->last_ts_switch = rq->clock;
 
@@ -3443,11 +3443,12 @@ static void __sched notrace __schedule(bool preempt)
 
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next);
-#ifdef CONFIG_SCHED_SMT
-		sg_balance_check(rq);
-#endif
 	} else
 		raw_spin_unlock_irq(&rq->lock);
+
+#ifdef CONFIG_SCHED_SMT
+	sg_balance_check(rq);
+#endif
 }
 
 void __noreturn do_task_dead(void)
