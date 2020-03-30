@@ -5554,10 +5554,10 @@ static void sched_init_topology_cpumask(void)
 			       cpu, (chk++)->bits[0]);
 
 		per_cpu(sched_cpu_affinity_end_mask, cpu) = chk;
-		printk(KERN_INFO "bmq: cpu#%d llc_id = %d, llc_mask idx = %ld\n",
+		printk(KERN_INFO "bmq: cpu#%d llc_id = %d, llc_mask idx = %d\n",
 		       cpu, per_cpu(sd_llc_id, cpu),
-		       per_cpu(sched_cpu_llc_mask, cpu) -
-		       &(per_cpu(sched_cpu_affinity_masks, cpu)[0]));
+		       (int) (per_cpu(sched_cpu_llc_mask, cpu) -
+			      &(per_cpu(sched_cpu_affinity_masks, cpu)[0])));
 	}
 }
 #endif
