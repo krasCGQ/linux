@@ -391,31 +391,37 @@ export KCONFIG_CONFIG
 # SHELL used by kbuild
 CONFIG_SHELL := sh
 
+# LLVM version if defined
+ifneq ($(LLVM_VERSION),)
+LLVM_VERSION := -$(LLVM_VERSION)
+export LLVM_VERSION
+endif
+
 HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS 2>/dev/null)
 HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
-HOSTCC       = gcc
-HOSTCXX      = g++
-KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 \
+HOSTCC       = clang$(LLVM_VERSION)
+HOSTCXX      = clang++$(LLVM_VERSION)
+KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 \
 		-fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS) \
 		$(HOSTCFLAGS)
-KBUILD_HOSTCXXFLAGS := -O2 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
+KBUILD_HOSTCXXFLAGS := -O3 $(HOST_LFS_CFLAGS) $(HOSTCXXFLAGS)
 KBUILD_HOSTLDFLAGS  := $(HOST_LFS_LDFLAGS) $(HOSTLDFLAGS)
 KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 
 # Make variables (CC, etc...)
-AS		= $(CROSS_COMPILE)as
-LD		= $(CROSS_COMPILE)ld
-CC		= $(CROSS_COMPILE)gcc
+AS		= llvm-as$(LLVM_VERSION)
+LD		= ld.lld$(LLVM_VERSION)
+CC		= clang$(LLVM_VERSION)
 CPP		= $(CC) -E
-AR		= $(CROSS_COMPILE)ar
-NM		= $(CROSS_COMPILE)nm
-STRIP		= $(CROSS_COMPILE)strip
-OBJCOPY		= $(CROSS_COMPILE)objcopy
-OBJDUMP		= $(CROSS_COMPILE)objdump
-OBJSIZE		= $(CROSS_COMPILE)size
-READELF		= $(CROSS_COMPILE)readelf
+AR		= llvm-ar$(LLVM_VERSION)
+NM		= llvm-nm$(LLVM_VERSION)
+STRIP		= llvm-strip$(LLVM_VERSION)
+OBJCOPY		= llvm-objcopy$(LLVM_VERSION)
+OBJDUMP		= llvm-objdump$(LLVM_VERSION)
+OBJSIZE		= llvm-size$(LLVM_VERSION)
+READELF		= llvm-readelf$(LLVM_VERSION)
 PAHOLE		= pahole
 LEX		= flex
 YACC		= bison
