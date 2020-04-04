@@ -480,12 +480,25 @@ static inline void sched_update_tick_dependency(struct rq *rq) { }
  * Add/Remove/Requeue task to/from the runqueue routines
  * Context: rq->lock
  */
+static inline void __dequeue_task(struct task_struct *p, struct rq *rq, int flags)
+{
+	psi_dequeue(p, flags & DEQUEUE_SLEEP);
+	sched_info_dequeued(rq, p);
+
+	list_del(&p->bmq_node);
+	if (list_empty(&rq->queue.heads[p->bmq_idx]))
+		clear_bit(p->bmq_idx, rq->queue.bitmap);
+}
+
 static inline void dequeue_task(struct task_struct *p, struct rq *rq, int flags)
 {
 	lockdep_assert_held(&rq->lock);
 
 	WARN_ONCE(task_rq(p) != rq, "bmq: dequeue task reside on cpu%d from cpu%d\n",
 		  task_cpu(p), cpu_of(rq));
+
+	psi_dequeue(p, flags & DEQUEUE_SLEEP);
+	sched_info_dequeued(rq, p);
 
 	list_del(&p->bmq_node);
 	if (list_empty(&rq->queue.heads[p->bmq_idx])) {
@@ -499,9 +512,16 @@ static inline void dequeue_task(struct task_struct *p, struct rq *rq, int flags)
 #endif
 
 	sched_update_tick_dependency(rq);
-	psi_dequeue(p, flags & DEQUEUE_SLEEP);
+}
 
-	sched_info_dequeued(rq, p);
+static inline void __enqueue_task(struct task_struct *p, struct rq *rq, int flags)
+{
+	sched_info_queued(rq, p);
+	psi_enqueue(p, flags);
+
+	p->bmq_idx = task_sched_prio(p);
+	list_add_tail(&p->bmq_node, &rq->queue.heads[p->bmq_idx]);
+	set_bit(p->bmq_idx, rq->queue.bitmap);
 }
 
 static inline void enqueue_task(struct task_struct *p, struct rq *rq, int flags)
@@ -511,9 +531,7 @@ static inline void enqueue_task(struct task_struct *p, struct rq *rq, int flags)
 	WARN_ONCE(task_rq(p) != rq, "bmq: enqueue task reside on cpu%d to cpu%d\n",
 		  task_cpu(p), cpu_of(rq));
 
-	p->bmq_idx = task_sched_prio(p);
-	list_add_tail(&p->bmq_node, &rq->queue.heads[p->bmq_idx]);
-	set_bit(p->bmq_idx, rq->queue.bitmap);
+	__enqueue_task(p, rq, flags);
 	update_sched_rq_watermark(rq);
 	++rq->nr_running;
 #ifdef CONFIG_SMP
@@ -522,9 +540,6 @@ static inline void enqueue_task(struct task_struct *p, struct rq *rq, int flags)
 #endif
 
 	sched_update_tick_dependency(rq);
-
-	sched_info_queued(rq, p);
-	psi_enqueue(p, flags);
 
 	/*
 	 * If in_iowait is set, the code below may not trigger any cpufreq
@@ -3215,9 +3230,9 @@ migrate_pending_tasks(struct rq *rq, struct rq *dest_rq, const int dest_cpu)
 	       (p = rq_next_bmq_task(skip, rq)) != rq->idle) {
 		skip = rq_next_bmq_task(p, rq);
 		if (cpumask_test_cpu(dest_cpu, p->cpus_ptr)) {
-			dequeue_task(p, rq, 0);
+			__dequeue_task(p, rq, 0);
 			set_task_cpu(p, dest_cpu);
-			enqueue_task(p, dest_rq, 0);
+			__enqueue_task(p, dest_rq, 0);
 			nr_migrated++;
 		}
 		nr_tries--;
@@ -3250,15 +3265,28 @@ static inline int take_other_rq_tasks(struct rq *rq, int cpu)
 			spin_acquire(&src_rq->lock.dep_map,
 				     SINGLE_DEPTH_NESTING, 1, _RET_IP_);
 
-			nr_migrated = migrate_pending_tasks(src_rq, rq, cpu);
+			if ((nr_migrated = migrate_pending_tasks(src_rq, rq, cpu))) {
+				src_rq->nr_running -= nr_migrated;
+#ifdef CONFIG_SMP
+				if (src_rq->nr_running < 2)
+					cpumask_clear_cpu(i, &sched_rq_pending_mask);
+#endif
+				rq->nr_running += nr_migrated;
+#ifdef CONFIG_SMP
+				if (rq->nr_running > 1)
+					cpumask_set_cpu(cpu, &sched_rq_pending_mask);
+#endif
+				update_sched_rq_watermark(rq);
+				cpufreq_update_util(rq, 0);
+
+				spin_release(&src_rq->lock.dep_map, _RET_IP_);
+				do_raw_spin_unlock(&src_rq->lock);
+
+				return 1;
+			}
 
 			spin_release(&src_rq->lock.dep_map, _RET_IP_);
 			do_raw_spin_unlock(&src_rq->lock);
-
-			if (nr_migrated) {
-				cpufreq_update_util(rq, 0);
-				return 1;
-			}
 		}
 	} while (++affinity_mask < end_mask);
 
