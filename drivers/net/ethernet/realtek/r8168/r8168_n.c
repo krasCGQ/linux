@@ -456,7 +456,11 @@ static void rtl8168_hw_config(struct net_device *dev);
 static void rtl8168_hw_start(struct net_device *dev);
 static int rtl8168_close(struct net_device *dev);
 static void rtl8168_set_rx_mode(struct net_device *dev);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+static void rtl8168_tx_timeout(struct net_device *dev, unsigned int new_mtu);
+#else
 static void rtl8168_tx_timeout(struct net_device *dev);
+#endif
 static struct net_device_stats *rtl8168_get_stats(struct net_device *dev);
 static int rtl8168_rx_interrupt(struct net_device *, struct rtl8168_private *, napi_budget);
 static int rtl8168_change_mtu(struct net_device *dev, int new_mtu);
@@ -1615,13 +1619,21 @@ static int rtl8168_proc_open(struct inode *inode, struct file *file)
 
         return single_open(file, show, dev);
 }
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+static const struct proc_ops rtl8168_proc_ops = {
+        .proc_open           = rtl8168_proc_open,
+        .proc_read           = seq_read,
+        .proc_lseek          = seq_lseek,
+        .proc_release        = single_release,
+};
+#else
 static const struct file_operations rtl8168_proc_fops = {
         .open           = rtl8168_proc_open,
         .read           = seq_read,
         .llseek         = seq_lseek,
         .release        = single_release,
 };
+#endif
 #endif
 
 /*
@@ -1666,8 +1678,14 @@ static void rtl8168_proc_init(struct net_device *dev)
                 proc_init_num++;
 
                 for (f = rtl8168_proc_files; f->name[0]; f++) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
                         if (!proc_create_data(f->name, S_IFREG | S_IRUGO, dir,
-                                              &rtl8168_proc_fops, f->show)) {
+                                              &rtl8168_proc_ops, f->show))
+#else
+                        if (!proc_create_data(f->name, S_IFREG | S_IRUGO, dir,
+                                              &rtl8168_proc_fops, f->show))
+#endif
+                        {
                                 printk("Unable to initialize "
                                        "/proc/net/%s/%s/%s\n",
                                        MODULENAME, dev->name, f->name);
@@ -27849,7 +27867,11 @@ static void rtl8168_reset_task(struct work_struct *work)
 }
 
 static void
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,6,0)
+rtl8168_tx_timeout(struct net_device *dev, unsigned int txqueue)
+#else
 rtl8168_tx_timeout(struct net_device *dev)
+#endif
 {
         struct rtl8168_private *tp = netdev_priv(dev);
         unsigned long flags;
