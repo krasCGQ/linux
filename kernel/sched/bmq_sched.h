@@ -68,8 +68,8 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 #define WF_MIGRATED	0x04		/* internal use, task got migrated */
 
 /* bits:
- * RT, Low prio adj range, nice width, high prio adj range, cpu idle task */
-#define bmq_BITS		(NICE_WIDTH + 2 * MAX_PRIORITY_ADJ + 2)
+ * RT(0-99), Low prio adj range, nice width, high prio adj range, cpu idle task */
+#define bmq_BITS	(MAX_RT_PRIO + NICE_WIDTH + 2 * MAX_PRIORITY_ADJ + 1)
 #define IDLE_TASK_SCHED_PRIO	(bmq_BITS - 1)
 
 struct bmq {
