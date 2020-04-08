@@ -5499,14 +5499,12 @@ static void sched_init_topology_cpumask_early(void)
 	}
 }
 
-#define TOPOLOGY_CPUMASK(name, func) \
-	if (cpumask_and(chk, chk, func(cpu))) {					\
-		per_cpu(sched_cpu_llc_mask, cpu) = chk;				\
-		per_cpu(sd_llc_id, cpu) = cpumask_first(func(cpu));		\
-		printk(KERN_INFO "bmq: cpu#%d affinity mask - "#name" 0x%08lx",	\
+#define TOPOLOGY_CPUMASK(name, mask, last) \
+	if (cpumask_and(chk, chk, mask))					\
+		printk(KERN_INFO "bmq: cpu#%02d affinity mask: 0x%08lx - "#name,\
 		       cpu, (chk++)->bits[0]);					\
-	}									\
-	cpumask_complement(chk, func(cpu))
+	if (!last)								\
+		cpumask_complement(chk, mask)
 
 static void sched_init_topology_cpumask(void)
 {
@@ -5518,20 +5516,18 @@ static void sched_init_topology_cpumask(void)
 
 		cpumask_complement(chk, cpumask_of(cpu));
 #ifdef CONFIG_SCHED_SMT
-		TOPOLOGY_CPUMASK(smt, topology_sibling_cpumask);
+		TOPOLOGY_CPUMASK(smt, topology_sibling_cpumask(cpu), false);
 #endif
-#ifdef CONFIG_SCHED_MC
-		TOPOLOGY_CPUMASK(coregroup, cpu_coregroup_mask);
-#endif
+		per_cpu(sd_llc_id, cpu) = cpumask_first(cpu_coregroup_mask(cpu));
+		per_cpu(sched_cpu_llc_mask, cpu) = chk;
+		TOPOLOGY_CPUMASK(coregroup, cpu_coregroup_mask(cpu), false);
 
-		TOPOLOGY_CPUMASK(core, topology_core_cpumask);
+		TOPOLOGY_CPUMASK(core, topology_core_cpumask(cpu), false);
 
-		if (cpumask_and(chk, chk, cpu_online_mask))
-			printk(KERN_INFO "bmq: cpu#%d affinity mask - others 0x%08lx",
-			       cpu, (chk++)->bits[0]);
+		TOPOLOGY_CPUMASK(others, cpu_online_mask, true);
 
 		per_cpu(sched_cpu_affinity_end_mask, cpu) = chk;
-		printk(KERN_INFO "bmq: cpu#%d llc_id = %d, llc_mask idx = %d\n",
+		printk(KERN_INFO "bmq: cpu#%02d llc_id = %d, llc_mask idx = %d\n",
 		       cpu, per_cpu(sd_llc_id, cpu),
 		       (int) (per_cpu(sched_cpu_llc_mask, cpu) -
 			      &(per_cpu(sched_cpu_affinity_masks, cpu)[0])));
