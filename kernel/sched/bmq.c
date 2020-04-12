@@ -3322,18 +3322,39 @@ choose_next_task(struct rq *rq, int cpu, struct task_struct *prev)
 
 	if (unlikely(rq->skip)) {
 		next = rq_runnable_task(rq);
+		if (next == rq->idle) {
 #ifdef	CONFIG_SMP
-		if (next == rq->idle && take_other_rq_tasks(rq, cpu))
+			if (!take_other_rq_tasks(rq, cpu)) {
+#endif
+				rq->skip = NULL;
+				schedstat_inc(rq->sched_goidle);
+				return next;
+#ifdef	CONFIG_SMP
+			}
 			next = rq_runnable_task(rq);
 #endif
+		}
 		rq->skip = NULL;
+#ifdef CONFIG_HIGH_RES_TIMERS
+		hrtick_start(rq, next->time_slice);
+#endif
 		return next;
 	}
 
 	next = rq_first_bmq_task(rq);
+	if (next == rq->idle) {
 #ifdef	CONFIG_SMP
-	if (next == rq->idle && take_other_rq_tasks(rq, cpu))
-		return rq_first_bmq_task(rq);
+		if (!take_other_rq_tasks(rq, cpu)) {
+#endif
+			schedstat_inc(rq->sched_goidle);
+			return next;
+#ifdef	CONFIG_SMP
+		}
+		next = rq_first_bmq_task(rq);
+#endif
+	}
+#ifdef CONFIG_HIGH_RES_TIMERS
+	hrtick_start(rq, next->time_slice);
 #endif
 	return next;
 }
@@ -3432,13 +3453,6 @@ static void __sched notrace __schedule(bool preempt)
 	check_curr(prev, rq);
 
 	next = choose_next_task(rq, cpu, prev);
-
-	if (next == rq->idle)
-		schedstat_inc(rq->sched_goidle);
-#ifdef CONFIG_HIGH_RES_TIMERS
-	else
-		hrtick_start(rq, next->time_slice);
-#endif
 
 	if (likely(prev != next)) {
 		next->last_ran = rq->clock_task;
