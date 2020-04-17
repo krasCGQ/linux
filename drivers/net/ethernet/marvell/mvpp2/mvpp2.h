@@ -622,7 +622,7 @@
 
 /* RX buffer constants */
 #define MVPP2_SKB_SHINFO_SIZE \
-	SKB_DATA_ALIGN(sizeof(struct skb_shared_info))
+	SKB_DATA_ALIGN(((int)(sizeof(struct skb_shared_info))))
 
 #define MVPP2_RX_PKT_SIZE(mtu) \
 	ALIGN((mtu) + MVPP2_MH_SIZE + MVPP2_VLAN_TAG_LEN + \
