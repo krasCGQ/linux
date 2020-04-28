@@ -5545,6 +5545,9 @@ static void sched_init_topology_cpumask(void)
 	cpumask_t *chk;
 
 	for_each_online_cpu(cpu) {
+		/* take chance to reset time slice for idle tasks */
+		cpu_rq(cpu)->idle->time_slice = sched_timeslice_ns;
+
 		chk = &(per_cpu(sched_cpu_affinity_masks, cpu)[0]);
 
 		cpumask_complement(chk, cpumask_of(cpu));
@@ -5581,6 +5584,7 @@ void __init sched_init_smp(void)
 #else
 void __init sched_init_smp(void)
 {
+	cpu_rq(0)->idle->time_slice = sched_timeslice_ns;
 }
 #endif /* CONFIG_SMP */
 
