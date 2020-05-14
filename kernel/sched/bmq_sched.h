@@ -507,4 +507,8 @@ static inline int sched_numa_find_closest(const struct cpumask *cpus, int cpu)
 	return nr_cpu_ids;
 }
 #endif
+
+void swake_up_all_locked(struct swait_queue_head *q);
+void __prepare_to_swait(struct swait_queue_head *q, struct swait_queue *wait);
+
 #endif /* BMQ_SCHED_H */
