@@ -225,6 +225,13 @@ static inline int best_mask_cpu(int cpu, const cpumask_t *cpumask)
 
 #endif /* CONFIG_SMP */
 
+#ifndef arch_scale_freq_tick
+static __always_inline
+void arch_scale_freq_tick(void)
+{
+}
+#endif
+
 #ifndef arch_scale_freq_capacity
 static __always_inline
 unsigned long arch_scale_freq_capacity(int cpu)

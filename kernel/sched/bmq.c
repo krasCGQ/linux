@@ -2819,6 +2819,7 @@ void scheduler_tick(void)
 	int cpu __maybe_unused = smp_processor_id();
 	struct rq *rq = cpu_rq(cpu);
 
+	arch_scale_freq_tick();
 	sched_clock_tick();
 
 	raw_spin_lock(&rq->lock);
