@@ -1,5 +1,5 @@
-#ifndef BMQ_SCHED_H
-#define BMQ_SCHED_H
+#ifndef ALT_SCHED_H
+#define ALT_SCHED_H
 
 #include <linux/sched.h>
 
@@ -46,6 +46,10 @@
 
 #include "cpupri.h"
 
+#ifdef CONFIG_SCHED_BMQ
+#include "bmq.h"
+#endif
+
 /* task_struct::on_rq states: */
 #define TASK_ON_RQ_QUEUED	1
 #define TASK_ON_RQ_MIGRATING	2
@@ -67,16 +71,6 @@ static inline int task_on_rq_migrating(struct task_struct *p)
 #define WF_FORK		0x02		/* child wakeup after fork */
 #define WF_MIGRATED	0x04		/* internal use, task got migrated */
 
-/* bits:
- * RT(0-99), Low prio adj range, nice width, high prio adj range, cpu idle task */
-#define bmq_BITS	(MAX_RT_PRIO + NICE_WIDTH + 2 * MAX_PRIORITY_ADJ + 1)
-#define IDLE_TASK_SCHED_PRIO	(bmq_BITS - 1)
-
-struct bmq {
-	DECLARE_BITMAP(bitmap, bmq_BITS);
-	struct list_head heads[bmq_BITS];
-};
-
 /*
  * This is the main, per-CPU runqueue data structure.
  * This data should only be modified by the local cpu.
@@ -89,7 +83,9 @@ struct rq {
 	struct task_struct *idle, *stop, *skip;
 	struct mm_struct *prev_mm;
 
+#ifdef CONFIG_SCHED_BMQ
 	struct bmq queue;
+#endif
 	unsigned long watermark;
 
 	/* switch count */
@@ -522,4 +518,4 @@ static inline int sched_numa_find_closest(const struct cpumask *cpus, int cpu)
 void swake_up_all_locked(struct swait_queue_head *q);
 void __prepare_to_swait(struct swait_queue_head *q, struct swait_queue *wait);
 
-#endif /* BMQ_SCHED_H */
+#endif /* ALT_SCHED_H */

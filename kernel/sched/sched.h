@@ -2,8 +2,8 @@
 /*
  * Scheduler internal types and methods:
  */
-#ifdef CONFIG_SCHED_BMQ
-#include "bmq_sched.h"
+#ifdef CONFIG_SCHED_ALT
+#include "alt_sched.h"
 #else
 
 #include <linux/sched.h>
@@ -2557,4 +2557,4 @@ static inline int task_running_nice(struct task_struct *p)
 {
 	return (task_nice(p) > 0);
 }
-#endif /* !CONFIG_SCHED_BMQ */
+#endif /* !CONFIG_SCHED_ALT */

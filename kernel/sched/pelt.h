@@ -1,7 +1,7 @@
 #ifdef CONFIG_SMP
 #include "sched-pelt.h"
 
-#ifndef CONFIG_SCHED_BMQ
+#ifndef CONFIG_SCHED_ALT
 int __update_load_avg_blocked_se(u64 now, struct sched_entity *se);
 int __update_load_avg_se(u64 now, struct cfs_rq *cfs_rq, struct sched_entity *se);
 int __update_load_avg_cfs_rq(u64 now, struct cfs_rq *cfs_rq);
@@ -39,7 +39,7 @@ update_irq_load_avg(struct rq *rq, u64 running)
 }
 #endif
 
-#ifndef CONFIG_SCHED_BMQ
+#ifndef CONFIG_SCHED_ALT
 /*
  * When a task is dequeued, its estimated utilization should not be update if
  * its util_avg has not been updated at least once.
@@ -160,11 +160,11 @@ static inline u64 cfs_rq_clock_pelt(struct cfs_rq *cfs_rq)
 	return rq_clock_pelt(rq_of(cfs_rq));
 }
 #endif
-#endif /* CONFIG_SCHED_BMQ */
+#endif /* CONFIG_SCHED_ALT */
 
 #else
 
-#ifndef CONFIG_SCHED_BMQ
+#ifndef CONFIG_SCHED_ALT
 static inline int
 update_cfs_rq_load_avg(u64 now, struct cfs_rq *cfs_rq)
 {

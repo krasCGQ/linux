@@ -238,6 +238,7 @@ rt_mutex_waiter_less(struct rt_mutex_waiter *left,
 	if (left->prio < right->prio)
 		return 1;
 
+#ifndef CONFIG_SCHED_BMQ
 	/*
 	 * If both waiters have dl_prio(), we check the deadlines of the
 	 * associated tasks.
@@ -246,6 +247,7 @@ rt_mutex_waiter_less(struct rt_mutex_waiter *left,
 	 */
 	if (dl_prio(left->prio))
 		return dl_time_before(left->deadline, right->deadline);
+#endif
 
 	return 0;
 }
@@ -257,6 +259,7 @@ rt_mutex_waiter_equal(struct rt_mutex_waiter *left,
 	if (left->prio != right->prio)
 		return 0;
 
+#ifndef CONFIG_SCHED_BMQ
 	/*
 	 * If both waiters have dl_prio(), we check the deadlines of the
 	 * associated tasks.
@@ -265,6 +268,7 @@ rt_mutex_waiter_equal(struct rt_mutex_waiter *left,
 	 */
 	if (dl_prio(left->prio))
 		return left->deadline == right->deadline;
+#endif
 
 	return 1;
 }

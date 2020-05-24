@@ -1,12 +1,12 @@
 /*
- * kernel/sched/bmq_debug.c
+ * kernel/sched/alt_debug.c
  *
  * Print the BMQ debugging details
  *
  * Author: Alfred Chen
  * Date  : 2020
  */
-#include "bmq_sched.h"
+#include "sched.h"
 
 /*
  * This allows printing both to /proc/sched_debug and

@@ -652,10 +652,10 @@ struct task_struct {
 	unsigned int			flags;
 	unsigned int			ptrace;
 
-#if defined(CONFIG_SMP) && !defined(CONFIG_SCHED_BMQ)
+#if defined(CONFIG_SMP) && !defined(CONFIG_SCHED_ALT)
 	struct llist_node		wake_entry;
 #endif
-#if defined(CONFIG_SMP) || defined(CONFIG_SCHED_BMQ)
+#if defined(CONFIG_SMP) || defined(CONFIG_SCHED_ALT)
 	int				on_cpu;
 #endif
 #ifdef CONFIG_SMP
@@ -663,7 +663,7 @@ struct task_struct {
 	/* Current CPU: */
 	unsigned int			cpu;
 #endif
-#ifndef CONFIG_SCHED_BMQ
+#ifndef CONFIG_SCHED_ALT
 	unsigned int			wakee_flips;
 	unsigned long			wakee_flip_decay_ts;
 	struct task_struct		*last_wakee;
@@ -677,7 +677,7 @@ struct task_struct {
 	 */
 	int				recent_used_cpu;
 	int				wake_cpu;
-#endif /* !CONFIG_SCHED_BMQ */
+#endif /* !CONFIG_SCHED_ALT */
 #endif
 	int				on_rq;
 
@@ -686,15 +686,17 @@ struct task_struct {
 	int				normal_prio;
 	unsigned int			rt_priority;
 
-#ifdef CONFIG_SCHED_BMQ
+#ifdef CONFIG_SCHED_ALT
 	u64				last_ran;
 	s64				time_slice;
 	int				boost_prio;
+#ifdef CONFIG_SCHED_BMQ
 	int				bmq_idx;
 	struct list_head		bmq_node;
+#endif /* CONFIG_SCHED_BMQ */
 	/* sched_clock time spent running */
 	u64				sched_time;
-#else /* !CONFIG_SCHED_BMQ */
+#else /* !CONFIG_SCHED_ALT */
 	const struct sched_class	*sched_class;
 	struct sched_entity		se;
 	struct sched_rt_entity		rt;
@@ -1322,14 +1324,14 @@ struct task_struct {
 	 */
 };
 
-#ifdef CONFIG_SCHED_BMQ
+#ifdef CONFIG_SCHED_ALT
 #define tsk_seruntime(t)		((t)->sched_time)
 /* replace the uncertian rt_timeout with 0UL */
 #define tsk_rttimeout(t)		(0UL)
 #else /* CFS */
 #define tsk_seruntime(t)	((t)->se.sum_exec_runtime)
 #define tsk_rttimeout(t)	((t)->rt.timeout)
-#endif /* !CONFIG_SCHED_BMQ */
+#endif /* !CONFIG_SCHED_ALT */
 
 static inline struct pid *task_pid(struct task_struct *task)
 {

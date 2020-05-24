@@ -183,7 +183,7 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 	return cpufreq_driver_resolve_freq(policy, freq);
 }
 
-#ifndef CONFIG_SCHED_BMQ
+#ifndef CONFIG_SCHED_ALT
 /*
  * This function computes an effective utilization for the given CPU, to be
  * used for frequency selection given the linear relation: f = u * f_max.
@@ -301,7 +301,7 @@ static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 
 	return schedutil_cpu_util(sg_cpu->cpu, util, max, FREQUENCY_UTIL, NULL);
 }
-#else /* CONFIG_SCHED_BMQ */
+#else /* CONFIG_SCHED_ALT */
 static unsigned long sugov_get_util(struct sugov_cpu *sg_cpu)
 {
 	sg_cpu->max = arch_scale_cpu_capacity(sg_cpu->cpu);
@@ -451,7 +451,7 @@ static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
  */
 static inline void ignore_dl_rate_limit(struct sugov_cpu *sg_cpu, struct sugov_policy *sg_policy)
 {
-#ifndef CONFIG_SCHED_BMQ
+#ifndef CONFIG_SCHED_ALT
 	if (cpu_bw_dl(cpu_rq(sg_cpu->cpu)) > sg_cpu->bw_dl)
 #endif
 		sg_policy->limits_changed = true;
@@ -927,7 +927,7 @@ static int __init sugov_register(void)
 core_initcall(sugov_register);
 
 #ifdef CONFIG_ENERGY_MODEL
-#ifndef CONFIG_SCHED_BMQ
+#ifndef CONFIG_SCHED_ALT
 extern bool sched_energy_update;
 extern struct mutex sched_energy_mutex;
 
@@ -958,7 +958,7 @@ void sched_cpufreq_governor_change(struct cpufreq_policy *policy,
 	}
 
 }
-#else /* CONFIG_SCHED_BMQ */
+#else /* CONFIG_SCHED_ALT */
 void sched_cpufreq_governor_change(struct cpufreq_policy *policy,
 				  struct cpufreq_governor *old_gov)
 {

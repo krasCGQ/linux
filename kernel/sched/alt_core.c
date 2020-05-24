@@ -1,7 +1,7 @@
 /*
- *  kernel/sched/bmq.c
+ *  kernel/sched/alt_core.c
  *
- *  BMQ Core kernel scheduler code and related syscalls
+ *  Core alternative kernel scheduler code and related syscalls
  *
  *  Copyright (C) 1991-2002  Linus Torvalds
  *
@@ -11,7 +11,7 @@
  *		scheduler by Alfred Chen.
  *  2019-02-20	BMQ(BitMap Queue) kernel scheduler by Alfred Chen.
  */
-#include "bmq_sched.h"
+#include "sched.h"
 
 #include <linux/sched/rt.h>
 
@@ -50,7 +50,7 @@
 
 #define STOP_PRIO		(MAX_RT_PRIO - 1)
 
-/* Default time slice is 4 in ms, can be set via kernel parameter "bmq.timeslice" */
+/* Default time slice is 4 in ms, can be set via kernel parameter "sched_timeslice" */
 u64 sched_timeslice_ns __read_mostly = (4 * 1000 * 1000);
 
 static int __init sched_timeslice(char *str)
@@ -63,15 +63,10 @@ static int __init sched_timeslice(char *str)
 
 	return 0;
 }
-early_param("bmq.timeslice", sched_timeslice);
+early_param("sched_timeslice", sched_timeslice);
 
 /* Reschedule if less than this many μs left */
 #define RESCHED_NS		(100 * 1000)
-
-static inline void print_scheduler_version(void)
-{
-	printk(KERN_INFO "bmq: BMQ CPU Scheduler 5.7-r1 by Alfred Chen.\n");
-}
 
 /**
  * sched_yield_type - Choose what sort of yield sched_yield will perform.
@@ -145,11 +140,11 @@ DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 #define IDLE_WM	(IDLE_TASK_SCHED_PRIO)
 
 static cpumask_t sched_sg_idle_mask ____cacheline_aligned_in_smp;
-static cpumask_t sched_rq_watermark[bmq_BITS] ____cacheline_aligned_in_smp;
+static cpumask_t sched_rq_watermark[SCHED_BITS] ____cacheline_aligned_in_smp;
 
 static inline void update_sched_rq_watermark(struct rq *rq)
 {
-	unsigned long watermark = find_first_bit(rq->queue.bitmap, bmq_BITS);
+	unsigned long watermark = find_first_bit(rq->queue.bitmap, SCHED_BITS);
 	unsigned long last_wm = rq->watermark;
 	unsigned long i;
 	int cpu;
@@ -193,55 +188,14 @@ static inline int task_sched_prio(struct task_struct *p)
 	return (p->prio < MAX_RT_PRIO)? p->prio : p->prio + p->boost_prio;
 }
 
-static inline void bmq_init(struct bmq *q)
-{
-	int i;
-
-	bitmap_zero(q->bitmap, bmq_BITS);
-	for(i = 0; i < bmq_BITS; i++)
-		INIT_LIST_HEAD(&q->heads[i]);
-}
-
-static inline void bmq_init_idle(struct bmq *q, struct task_struct *idle)
-{
-	INIT_LIST_HEAD(&q->heads[IDLE_TASK_SCHED_PRIO]);
-	list_add(&idle->bmq_node, &q->heads[IDLE_TASK_SCHED_PRIO]);
-	set_bit(IDLE_TASK_SCHED_PRIO, q->bitmap);
-}
-
-/*
- * This routine used in bmq scheduler only which assume the idle task in the bmq
- */
-static inline struct task_struct *rq_first_bmq_task(struct rq *rq)
-{
-	unsigned long idx = find_first_bit(rq->queue.bitmap, bmq_BITS);
-	const struct list_head *head = &rq->queue.heads[idx];
-
-	return list_first_entry(head, struct task_struct, bmq_node);
-}
-
-static inline struct task_struct *
-rq_next_bmq_task(struct task_struct *p, struct rq *rq)
-{
-	unsigned long idx = p->bmq_idx;
-	struct list_head *head = &rq->queue.heads[idx];
-
-	if (list_is_last(&p->bmq_node, head)) {
-		idx = find_next_bit(rq->queue.bitmap, bmq_BITS, idx + 1);
-		head = &rq->queue.heads[idx];
-
-		return list_first_entry(head, struct task_struct, bmq_node);
-	}
-
-	return list_next_entry(p, bmq_node);
-}
+#include "bmq_imp.h"
 
 static inline struct task_struct *rq_runnable_task(struct rq *rq)
 {
-	struct task_struct *next = rq_first_bmq_task(rq);
+	struct task_struct *next = sched_rq_first_task(rq);
 
 	if (unlikely(next == rq->skip))
-		next = rq_next_bmq_task(next, rq);
+		next = sched_rq_next_task(next, rq);
 
 	return next;
 }
@@ -480,31 +434,14 @@ static inline void sched_update_tick_dependency(struct rq *rq) { }
  * Add/Remove/Requeue task to/from the runqueue routines
  * Context: rq->lock
  */
-static inline void __dequeue_task(struct task_struct *p, struct rq *rq, int flags)
-{
-	psi_dequeue(p, flags & DEQUEUE_SLEEP);
-	sched_info_dequeued(rq, p);
-
-	list_del(&p->bmq_node);
-	if (list_empty(&rq->queue.heads[p->bmq_idx]))
-		clear_bit(p->bmq_idx, rq->queue.bitmap);
-}
-
 static inline void dequeue_task(struct task_struct *p, struct rq *rq, int flags)
 {
 	lockdep_assert_held(&rq->lock);
 
-	WARN_ONCE(task_rq(p) != rq, "bmq: dequeue task reside on cpu%d from cpu%d\n",
+	WARN_ONCE(task_rq(p) != rq, "sched: dequeue task reside on cpu%d from cpu%d\n",
 		  task_cpu(p), cpu_of(rq));
 
-	psi_dequeue(p, flags & DEQUEUE_SLEEP);
-	sched_info_dequeued(rq, p);
-
-	list_del(&p->bmq_node);
-	if (list_empty(&rq->queue.heads[p->bmq_idx])) {
-		clear_bit(p->bmq_idx, rq->queue.bitmap);
-		update_sched_rq_watermark(rq);
-	}
+	__SCHED_DEQUEUE_TASK(p, rq, flags, update_sched_rq_watermark(rq));
 	--rq->nr_running;
 #ifdef CONFIG_SMP
 	if (1 == rq->nr_running)
@@ -514,24 +451,14 @@ static inline void dequeue_task(struct task_struct *p, struct rq *rq, int flags)
 	sched_update_tick_dependency(rq);
 }
 
-static inline void __enqueue_task(struct task_struct *p, struct rq *rq, int flags)
-{
-	sched_info_queued(rq, p);
-	psi_enqueue(p, flags);
-
-	p->bmq_idx = task_sched_prio(p);
-	list_add_tail(&p->bmq_node, &rq->queue.heads[p->bmq_idx]);
-	set_bit(p->bmq_idx, rq->queue.bitmap);
-}
-
 static inline void enqueue_task(struct task_struct *p, struct rq *rq, int flags)
 {
 	lockdep_assert_held(&rq->lock);
 
-	WARN_ONCE(task_rq(p) != rq, "bmq: enqueue task reside on cpu%d to cpu%d\n",
+	WARN_ONCE(task_rq(p) != rq, "sched: enqueue task reside on cpu%d to cpu%d\n",
 		  task_cpu(p), cpu_of(rq));
 
-	__enqueue_task(p, rq, flags);
+	__SCHED_ENQUEUE_TASK(p, rq, flags);
 	update_sched_rq_watermark(rq);
 	++rq->nr_running;
 #ifdef CONFIG_SMP
@@ -552,21 +479,11 @@ static inline void enqueue_task(struct task_struct *p, struct rq *rq, int flags)
 
 static inline void requeue_task(struct task_struct *p, struct rq *rq)
 {
-	int idx = task_sched_prio(p);
-
 	lockdep_assert_held(&rq->lock);
-	WARN_ONCE(task_rq(p) != rq, "bmq: cpu[%d] requeue task reside on cpu%d\n",
+	WARN_ONCE(task_rq(p) != rq, "sched: cpu[%d] requeue task reside on cpu%d\n",
 		  cpu_of(rq), task_cpu(p));
 
-	list_del(&p->bmq_node);
-	list_add_tail(&p->bmq_node, &rq->queue.heads[idx]);
-	if (idx != p->bmq_idx) {
-		if (list_empty(&rq->queue.heads[p->bmq_idx]))
-			clear_bit(p->bmq_idx, rq->queue.bitmap);
-		p->bmq_idx = idx;
-		set_bit(p->bmq_idx, rq->queue.bitmap);
-		update_sched_rq_watermark(rq);
-	}
+	__requeue_task(p, rq);
 }
 
 /*
@@ -858,7 +775,7 @@ void wake_up_nohz_cpu(int cpu)
 
 static inline void check_preempt_curr(struct rq *rq)
 {
-	if (rq_first_bmq_task(rq) != rq->curr)
+	if (sched_rq_first_task(rq) != rq->curr)
 		resched_curr(rq);
 }
 
@@ -901,7 +818,7 @@ static enum hrtimer_restart hrtick(struct hrtimer *timer)
 static inline int hrtick_enabled(struct rq *rq)
 {
 	/**
-	 * BMQ doesn't support sched_feat yet
+	 * Alt schedule FW doesn't support sched_feat yet
 	if (!sched_feat(HRTICK))
 		return 0;
 	*/
@@ -1643,7 +1560,7 @@ ttwu_stat(struct task_struct *p, int cpu, int wake_flags)
 	if (cpu == rq->cpu)
 		__schedstat_inc(rq->ttwu_local);
 	else {
-		/** BMQ ToDo:
+		/** Alt schedule FW ToDo:
 		 * How to do ttwu_wake_remote
 		 */
 	}
@@ -3233,12 +3150,12 @@ migrate_pending_tasks(struct rq *rq, struct rq *dest_rq, const int dest_cpu)
 	int nr_tries = min(rq->nr_running / 2, SCHED_RQ_NR_MIGRATION);
 
 	while (skip != rq->idle && nr_tries &&
-	       (p = rq_next_bmq_task(skip, rq)) != rq->idle) {
-		skip = rq_next_bmq_task(p, rq);
+	       (p = sched_rq_next_task(skip, rq)) != rq->idle) {
+		skip = sched_rq_next_task(p, rq);
 		if (cpumask_test_cpu(dest_cpu, p->cpus_ptr)) {
-			__dequeue_task(p, rq, 0);
+			__SCHED_DEQUEUE_TASK(p, rq, 0, );
 			set_task_cpu(p, dest_cpu);
-			__enqueue_task(p, dest_rq, 0);
+			__SCHED_ENQUEUE_TASK(p, dest_rq, 0);
 			nr_migrated++;
 		}
 		nr_tries--;
@@ -3347,7 +3264,7 @@ choose_next_task(struct rq *rq, int cpu, struct task_struct *prev)
 		return next;
 	}
 
-	next = rq_first_bmq_task(rq);
+	next = sched_rq_first_task(rq);
 	if (next == rq->idle) {
 #ifdef	CONFIG_SMP
 		if (!take_other_rq_tasks(rq, cpu)) {
@@ -3356,7 +3273,7 @@ choose_next_task(struct rq *rq, int cpu, struct task_struct *prev)
 			return next;
 #ifdef	CONFIG_SMP
 		}
-		next = rq_first_bmq_task(rq);
+		next = sched_rq_first_task(rq);
 #endif
 	}
 #ifdef CONFIG_HIGH_RES_TIMERS
@@ -3417,7 +3334,7 @@ static void __sched notrace __schedule(bool preempt)
 
 	schedule_debug(prev, preempt);
 
-	/* by passing sched_feat(HRTICK) checking which BMQ doesn't support */
+	/* by passing sched_feat(HRTICK) checking which Alt schedule FW doesn't support */
 	hrtick_clear(rq);
 
 	local_irq_disable();
@@ -3767,7 +3684,7 @@ EXPORT_SYMBOL(default_wake_function);
 static inline void check_task_changed(struct rq *rq, struct task_struct *p)
 {
 	/* Trigger resched if task sched_prio has been modified. */
-	if (task_on_rq_queued(p) && task_sched_prio(p) != p->bmq_idx) {
+	if (task_on_rq_queued(p) && sched_task_need_requeue(p)) {
 		requeue_task(p, rq);
 		check_preempt_curr(rq);
 	}
@@ -4083,7 +4000,7 @@ static int __sched_setscheduler(struct task_struct *p,
 	BUG_ON(pi && in_interrupt());
 
 	/*
-	 * BMQ supports SCHED_DEADLINE by squash it as prio 0 SCHED_FIFO
+	 * Alt schedule FW supports SCHED_DEADLINE by squash it as prio 0 SCHED_FIFO
 	 */
 	if (unlikely(SCHED_DEADLINE == policy)) {
 		attr = &dl_squash_attr;
@@ -4908,7 +4825,7 @@ EXPORT_SYMBOL(yield);
  * It's the caller's job to ensure that the target task struct
  * can't go away on us before we can do any checks.
  *
- * In BMQ, yield_to is not supported.
+ * In Alt schedule FW, yield_to is not supported.
  *
  * Return:
  *	true (>0) if we indeed boosted the target task.
@@ -5159,7 +5076,7 @@ void show_state_filter(unsigned long state_filter)
 	}
 
 #ifdef CONFIG_SCHED_DEBUG
-	/* TODO: BMQ should support this
+	/* TODO: Alt schedule FW should support this
 	if (!state_filter)
 		sysrq_sched_debug_show();
 	*/
@@ -5200,8 +5117,7 @@ void init_idle(struct task_struct *idle, int cpu)
 	idle->last_ran = rq->clock_task;
 	idle->state = TASK_RUNNING;
 	idle->flags |= PF_IDLE;
-	idle->bmq_idx = IDLE_TASK_SCHED_PRIO;
-	bmq_init_idle(&rq->queue, idle);
+	sched_queue_init_idle(rq, idle);
 
 	kasan_unpoison_task_stack(idle);
 
@@ -5311,13 +5227,13 @@ static void migrate_tasks(struct rq *dead_rq)
 	 */
 	rq->stop = NULL;
 
-	p = rq_first_bmq_task(rq);
+	p = sched_rq_first_task(rq);
 	while (p != rq->idle) {
 		int dest_cpu;
 
 		/* skip the running task */
 		if (task_running(p) || 1 == p->nr_cpus_allowed) {
-			p = rq_next_bmq_task(p, rq);
+			p = sched_rq_next_task(p, rq);
 			continue;
 		}
 
@@ -5341,7 +5257,7 @@ static void migrate_tasks(struct rq *dead_rq)
 		 */
 		if (WARN_ON(task_rq(p) != rq || !task_on_rq_queued(p))) {
 			raw_spin_unlock(&p->pi_lock);
-			p = rq_next_bmq_task(p, rq);
+			p = sched_rq_next_task(p, rq);
 			continue;
 		}
 
@@ -5355,7 +5271,7 @@ static void migrate_tasks(struct rq *dead_rq)
 		rq = dead_rq;
 		raw_spin_lock(&rq->lock);
 		/* Check queued task all over from the header again */
-		p = rq_first_bmq_task(rq);
+		p = sched_rq_first_task(rq);
 	}
 
 	rq->stop = stop;
@@ -5543,7 +5459,7 @@ static void sched_init_topology_cpumask_early(void)
 
 #define TOPOLOGY_CPUMASK(name, mask, last) \
 	if (cpumask_and(chk, chk, mask))					\
-		printk(KERN_INFO "bmq: cpu#%02d affinity mask: 0x%08lx - "#name,\
+		printk(KERN_INFO "sched: cpu#%02d affinity mask: 0x%08lx - "#name,\
 		       cpu, (chk++)->bits[0]);					\
 	if (!last)								\
 		cpumask_complement(chk, mask)
@@ -5572,7 +5488,7 @@ static void sched_init_topology_cpumask(void)
 		TOPOLOGY_CPUMASK(others, cpu_online_mask, true);
 
 		per_cpu(sched_cpu_affinity_end_mask, cpu) = chk;
-		printk(KERN_INFO "bmq: cpu#%02d llc_id = %d, llc_mask idx = %d\n",
+		printk(KERN_INFO "sched: cpu#%02d llc_id = %d, llc_mask idx = %d\n",
 		       cpu, per_cpu(sd_llc_id, cpu),
 		       (int) (per_cpu(sched_cpu_llc_mask, cpu) -
 			      &(per_cpu(sched_cpu_affinity_masks, cpu)[0])));
@@ -5633,12 +5549,12 @@ void __init sched_init(void)
 	int i;
 	struct rq *rq;
 
-	print_scheduler_version();
+	printk(KERN_INFO ALT_SCHED_VERSION_MSG);
 
 	wait_bit_init();
 
 #ifdef CONFIG_SMP
-	for (i = 0; i < bmq_BITS; i++)
+	for (i = 0; i < SCHED_BITS; i++)
 		cpumask_copy(&sched_rq_watermark[i], cpu_present_mask);
 #endif
 
@@ -5652,7 +5568,7 @@ void __init sched_init(void)
 	for_each_possible_cpu(i) {
 		rq = cpu_rq(i);
 
-		bmq_init(&rq->queue);
+		sched_queue_init(rq);
 		rq->watermark = IDLE_WM;
 		rq->skip = NULL;
 
@@ -5676,7 +5592,6 @@ void __init sched_init(void)
 	/* Set rq->online for cpu 0 */
 	cpu_rq(0)->online = true;
 #endif
-
 	/*
 	 * The boot idle thread does lazy MMU switching as well:
 	 */
@@ -5993,6 +5908,7 @@ static void cpu_cgroup_attach(struct cgroup_taskset *tset)
 static struct cftype cpu_legacy_files[] = {
 	{ }	/* Terminate */
 };
+
 
 static struct cftype cpu_files[] = {
 	{ }	/* terminate */

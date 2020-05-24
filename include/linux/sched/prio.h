@@ -26,7 +26,7 @@
 #define MAX_PRIO		(MAX_RT_PRIO + NICE_WIDTH)
 #define DEFAULT_PRIO		(MAX_RT_PRIO + NICE_WIDTH / 2)
 
-#ifdef CONFIG_SCHED_BMQ
+#ifdef CONFIG_SCHED_ALT
 /* +/- priority levels from the base priority */
 #define MAX_PRIORITY_ADJ	4
 #endif

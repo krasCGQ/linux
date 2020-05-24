@@ -1048,7 +1048,7 @@ static int trace_wakeup_test_thread(void *data)
 {
 	/* Make this a -deadline thread */
 	static const struct sched_attr attr = {
-#ifdef CONFIG_SCHED_BMQ
+#ifdef CONFIG_SCHED_ALT
 		/* No deadline on BMQ, use RR */
 		.sched_policy = SCHED_RR,
 #else
