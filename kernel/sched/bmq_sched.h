@@ -329,6 +329,11 @@ this_rq_lock_irq(struct rq_flags *rf)
 	return rq;
 }
 
+static inline int task_current(struct rq *rq, struct task_struct *p)
+{
+	return rq->curr == p;
+}
+
 static inline bool task_running(struct task_struct *p)
 {
 	return p->on_cpu;
