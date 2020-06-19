@@ -402,16 +402,22 @@ export KBUILD_DEFCONFIG := defconfig
 # SHELL used by kbuild
 CONFIG_SHELL := sh
 
+# CC version if defined
+ifneq ($(CC_VERSION),)
+CC_SUFFIX := -$(CC_VERSION)
+export CC_SUFFIX
+endif
+
 HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS 2>/dev/null)
 HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
 ifneq ($(LLVM),)
-HOSTCC	= clang
-HOSTCXX	= clang++
+HOSTCC	= clang$(CC_SUFFIX)
+HOSTCXX	= clang++$(CC_SUFFIX)
 else
-HOSTCC	= gcc
-HOSTCXX	= g++
+HOSTCC	= gcc$(CC_SUFFIX)
+HOSTCXX	= g++$(CC_SUFFIX)
 endif
 
 export KBUILD_USERCFLAGS := -Wall -Wmissing-prototypes -Wstrict-prototypes \
@@ -426,16 +432,16 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-CC		= clang
-LD		= ld.lld
-AR		= llvm-ar
-NM		= llvm-nm
-OBJCOPY		= llvm-objcopy
-OBJDUMP		= llvm-objdump
-READELF		= llvm-readelf
-STRIP		= llvm-strip
+CC		= clang$(CC_SUFFIX)
+LD		= ld.lld$(CC_SUFFIX)
+AR		= llvm-ar$(CC_SUFFIX)
+NM		= llvm-nm$(CC_SUFFIX)
+OBJCOPY		= llvm-objcopy$(CC_SUFFIX)
+OBJDUMP		= llvm-objdump$(CC_SUFFIX)
+READELF		= llvm-readelf$(CC_SUFFIX)
+STRIP		= llvm-strip$(CC_SUFFIX)
 else
-CC		= $(CROSS_COMPILE)gcc
+CC		= $(CROSS_COMPILE)gcc$(CC_SUFFIX)
 LD		= $(CROSS_COMPILE)ld
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
