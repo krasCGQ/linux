@@ -255,7 +255,7 @@
 #define DEFAULT_POLL_PERIOD_NS (NSEC_PER_SEC / DEFAULT_POLL_FREQUENCY_HZ)
 
 /* for sysctl proc_dointvec_minmax of dev.i915.perf_stream_paranoid */
-static u32 i915_perf_stream_paranoid = true;
+static u32 i915_perf_stream_paranoid = false;
 
 /* The maximum exponent the hardware accepts is 63 (essentially it selects one
  * of the 64bit timestamp bits to trigger reports from) but there's currently
