@@ -4,12 +4,12 @@ include ../scripts/Makefile.arch
 
 # always use the host compiler
 ifneq ($(LLVM),)
-HOSTAR	?= llvm-ar
-HOSTCC	?= clang
-HOSTLD	?= ld.lld
+HOSTAR	?= llvm-ar$(CC_VERSION)
+HOSTCC	?= clang$(CC_VERSION)
+HOSTLD	?= ld.lld$(CC_VERSION)
 else
 HOSTAR	?= ar
-HOSTCC	?= gcc
+HOSTCC	?= gcc$(CC_VERSION)
 HOSTLD	?= ld
 endif
 AR	 = $(HOSTAR)
