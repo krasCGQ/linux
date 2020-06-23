@@ -397,8 +397,8 @@ CONFIG_SHELL := sh
 
 # CC version if defined
 ifneq ($(CC_VERSION),)
-CC_VERSION := -$(CC_VERSION)
-export CC_VERSION
+CC_SUFFIX := -$(CC_VERSION)
+export CC_SUFFIX
 endif
 
 HOST_LFS_CFLAGS := $(shell getconf LFS_CFLAGS 2>/dev/null)
@@ -406,11 +406,11 @@ HOST_LFS_LDFLAGS := $(shell getconf LFS_LDFLAGS 2>/dev/null)
 HOST_LFS_LIBS := $(shell getconf LFS_LIBS 2>/dev/null)
 
 ifneq ($(LLVM),)
-HOSTCC	= clang$(CC_VERSION)
-HOSTCXX	= clang++$(CC_VERSION)
+HOSTCC	= clang$(CC_SUFFIX)
+HOSTCXX	= clang++$(CC_SUFFIX)
 else
-HOSTCC	= gcc$(CC_VERSION)
-HOSTCXX	= g++$(CC_VERSION)
+HOSTCC	= gcc$(CC_SUFFIX)
+HOSTCXX	= g++$(CC_SUFFIX)
 endif
 KBUILD_HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 \
 		-fomit-frame-pointer -std=gnu89 $(HOST_LFS_CFLAGS) \
@@ -422,17 +422,17 @@ KBUILD_HOSTLDLIBS   := $(HOST_LFS_LIBS) $(HOSTLDLIBS)
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-CC		= clang$(CC_VERSION)
-LD		= ld.lld$(CC_VERSION)
-AR		= llvm-ar$(CC_VERSION)
-NM		= llvm-nm$(CC_VERSION)
-OBJCOPY		= llvm-objcopy$(CC_VERSION)
-OBJDUMP		= llvm-objdump$(CC_VERSION)
-READELF		= llvm-readelf$(CC_VERSION)
-OBJSIZE		= llvm-size$(CC_VERSION)
-STRIP		= llvm-strip$(CC_VERSION)
+CC		= clang$(CC_SUFFIX)
+LD		= ld.lld$(CC_SUFFIX)
+AR		= llvm-ar$(CC_SUFFIX)
+NM		= llvm-nm$(CC_SUFFIX)
+OBJCOPY		= llvm-objcopy$(CC_SUFFIX)
+OBJDUMP		= llvm-objdump$(CC_SUFFIX)
+READELF		= llvm-readelf$(CC_SUFFIX)
+OBJSIZE		= llvm-size$(CC_SUFFIX)
+STRIP		= llvm-strip$(CC_SUFFIX)
 else
-CC		= $(CROSS_COMPILE)gcc$(CC_VERSION)
+CC		= $(CROSS_COMPILE)gcc$(CC_SUFFIX)
 LD		= $(CROSS_COMPILE)ld
 AR		= $(CROSS_COMPILE)ar
 NM		= $(CROSS_COMPILE)nm
