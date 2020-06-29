@@ -794,7 +794,8 @@ void bfq_bic_update_cgroup(struct bfq_io_cq *bic, struct bio *bio)
 	 * refcounter for bfqg, to let it disappear only after no
 	 * bfq_queue refers to it any longer.
 	 */
-	blkg_path(bfqg_to_blkg(bfqg), bfqg->blkg_path, sizeof(bfqg->blkg_path));
+	cgroup_path(bfqg_to_blkg(bfqg)->blkcg->css.cgroup, bfqg->blkg_path,
+		    sizeof(bfqg->blkg_path));
 	bic->blkcg_serial_nr = serial_nr;
 out:
 	rcu_read_unlock();
