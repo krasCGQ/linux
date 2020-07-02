@@ -5,7 +5,7 @@
 #include <uapi/asm-generic/resource.h>
 
 
-#ifdef CONFIG_SCHED_BMQ
+#ifdef CONFIG_SCHED_ALT
 #define RLIM_NICE 30
 #else
 #define RLIM_NICE 0

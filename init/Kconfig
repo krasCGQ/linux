@@ -716,7 +716,6 @@ menu "Scheduler features"
 
 menuconfig SCHED_ALT
 	bool "Alternative CPU Schedulers"
-	default y
 	help
 	  This feature enable alternative CPU scheduler"
 
