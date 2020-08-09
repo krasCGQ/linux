@@ -32,6 +32,7 @@
 #include <linux/posix-timers.h>
 #include <linux/rseq.h>
 #include <linux/kcsan.h>
+#include <linux/skip_list.h>
 
 /* task_struct member predeclarations (sorted alphabetically): */
 struct audit_context;
@@ -687,11 +688,19 @@ struct task_struct {
 #ifdef CONFIG_SCHED_ALT
 	u64				last_ran;
 	s64				time_slice;
-	int				boost_prio;
 #ifdef CONFIG_SCHED_BMQ
+	int				boost_prio;
 	int				bmq_idx;
 	struct list_head		bmq_node;
 #endif /* CONFIG_SCHED_BMQ */
+#ifdef CONFIG_SCHED_PDS
+	u64				deadline;
+	u64				priodl;
+	/* skip list level */
+	int				sl_level;
+	/* skip list node */
+	struct skiplist_node		sl_node;
+#endif /* CONFIG_SCHED_PDS */
 	/* sched_clock time spent running */
 	u64				sched_time;
 #else /* !CONFIG_SCHED_ALT */
