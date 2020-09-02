@@ -22,6 +22,8 @@ subdir-ccflags-y += $(call cc-disable-warning, sign-compare)
 subdir-ccflags-y += $(call cc-disable-warning, sometimes-uninitialized)
 subdir-ccflags-y += $(call cc-disable-warning, initializer-overrides)
 subdir-ccflags-y += $(call cc-disable-warning, frame-address)
+subdir-ccflags-y += $(call cc-disable-warning, compound-token-split-by-macro)
+subdir-ccflags-y += $(call cc-disable-warning, compound-token-split-by-space)
 subdir-ccflags-$(CONFIG_DRM_I915_WERROR) += -Werror
 
 # Fine grained warnings disable

@@ -782,6 +782,8 @@ KBUILD_CFLAGS += -Wno-gnu
 # source of a reference will be _MergedGlobals and not on of the whitelisted names.
 # See modpost pattern 2
 KBUILD_CFLAGS += -mno-global-merge
+KBUILD_CFLAGS += $(call cc-disable-warning, compound-token-split-by-macro)
+KBUILD_CFLAGS += $(call cc-disable-warning, compound-token-split-by-space)
 else
 
 # These warnings generated too much noise in a regular build.
