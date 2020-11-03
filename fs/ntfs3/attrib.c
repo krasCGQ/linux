@@ -1255,7 +1255,7 @@ int attr_allocate_frame(struct ntfs_inode *ni, CLST frame, size_t compr_size,
 		end = vcn + clst_data;
 		/* run contains updated range [vcn + len : end) */
 	} else {
-		CLST alen, hint;
+		CLST alen, hint = 0;
 		/* Get the last lcn to allocate from */
 		if (vcn + clst_data &&
 		    !run_lookup_entry(run, vcn + clst_data - 1, &hint, NULL,
