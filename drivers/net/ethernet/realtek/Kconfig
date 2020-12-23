@@ -120,7 +120,7 @@ config R8168
 	select CRC32
 	select NET_CORE
 	select MII
-	---help---
+	help
 	  Say Y here if you have a Realtek 8168 PCI-Express Gigabit Ethernet
 	  adapter.
 
