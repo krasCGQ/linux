@@ -38,10 +38,12 @@ static bool __read_mostly sched_itmt_capable;
  */
 unsigned int __read_mostly sysctl_sched_itmt_enabled;
 
+#ifndef CONFIG_SCHED_ALT
 extern int best_core;
 extern int second_best_core;
 static int best_core_score;
 static int second_best_core_score;
+#endif
 
 static int sched_itmt_update_handler(struct ctl_table *table, int write,
 				     void *buffer, size_t *lenp, loff_t *ppos)
@@ -207,6 +209,7 @@ void sched_set_itmt_core_prio(int prio, int core_cpu)
 		per_cpu(sched_core_priority, cpu) = smt_prio;
 		i++;
 
+#ifndef CONFIG_SCHED_ALT
 		if (smt_prio > best_core_score) {
 			best_core = cpu;
 			best_core_score = smt_prio;
@@ -214,5 +217,6 @@ void sched_set_itmt_core_prio(int prio, int core_cpu)
 			second_best_core = cpu;
 			second_best_core_score = smt_prio;
 		}
+#endif
 	}
 }
