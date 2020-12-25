@@ -1202,7 +1202,7 @@ static void bch2_coalesce_nodes(struct bch_fs *c, struct btree_iter *iter,
 		delete.k.p = old_nodes[i]->key.k.p;
 		bch2_keylist_add_in_order(&keylist, &delete);
 next:
-		i = i;
+		continue;
 	}
 
 	/*
