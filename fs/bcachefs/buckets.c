@@ -1392,13 +1392,13 @@ int bch2_mark_update(struct btree_trans *trans,
 	if (unlikely(flags & BTREE_TRIGGER_NORUN))
 		return 0;
 
-	if (!btree_node_type_needs_gc(iter->btree_id))
+	if (!btree_node_type_needs_gc(btree_iter_key_type(iter)))
 		return 0;
 
 	bkey_init(&unpacked);
 	old = (struct bkey_s_c) { &unpacked, NULL };
 
-	if (!btree_node_type_is_extents(iter->btree_id)) {
+	if (!btree_iter_is_extents(iter)) {
 		/* iterators should be uptodate, shouldn't get errors here: */
 		if (btree_iter_type(iter) != BTREE_ITER_CACHED) {
 			old = bch2_btree_iter_peek_slot(iter);
@@ -1548,7 +1548,7 @@ static struct btree_iter *trans_get_update(struct btree_trans *trans,
 
 	trans_for_each_update(trans, i)
 		if (i->iter->btree_id == btree_id &&
-		    (btree_node_type_is_extents(btree_id)
+		    (btree_node_type_is_extents((enum btree_node_type)btree_id)
 		     ? bkey_cmp(pos, bkey_start_pos(&i->k->k)) >= 0 &&
 		       bkey_cmp(pos, i->k->k.p) < 0
 		     : !bkey_cmp(pos, i->iter->pos))) {
@@ -2000,10 +2000,10 @@ int bch2_trans_mark_update(struct btree_trans *trans,
 	if (unlikely(flags & BTREE_TRIGGER_NORUN))
 		return 0;
 
-	if (!btree_node_type_needs_gc(iter->btree_id))
+	if (!btree_node_type_needs_gc(btree_iter_key_type(iter)))
 		return 0;
 
-	if (!btree_node_type_is_extents(iter->btree_id)) {
+	if (!btree_iter_is_extents(iter)) {
 		/* iterators should be uptodate, shouldn't get errors here: */
 		if (btree_iter_type(iter) != BTREE_ITER_CACHED) {
 			old = bch2_btree_iter_peek_slot(iter);

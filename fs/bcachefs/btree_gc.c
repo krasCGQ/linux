@@ -208,9 +208,9 @@ static int bch2_gc_btree(struct bch_fs *c, enum btree_id btree_id,
 	struct btree_trans trans;
 	struct btree_iter *iter;
 	struct btree *b;
-	unsigned depth = metadata_only			? 1
-		: bch2_expensive_debug_checks		? 0
-		: !btree_node_type_needs_gc(btree_id)	? 1
+	unsigned depth = metadata_only						? 1
+		: bch2_expensive_debug_checks					? 0
+		: !btree_node_type_needs_gc((enum btree_node_type)btree_id)	? 1
 		: 0;
 	u8 max_stale = 0;
 	int ret = 0;
@@ -327,9 +327,9 @@ static int bch2_gc_btree_init(struct bch_fs *c,
 			      bool metadata_only)
 {
 	struct btree *b;
-	unsigned target_depth = metadata_only		? 1
-		: bch2_expensive_debug_checks		? 0
-		: !btree_node_type_needs_gc(btree_id)	? 1
+	unsigned target_depth = metadata_only					? 1
+		: bch2_expensive_debug_checks					? 0
+		: !btree_node_type_needs_gc((enum btree_node_type)btree_id)	? 1
 		: 0;
 	u8 max_stale = 0;
 	int ret = 0;

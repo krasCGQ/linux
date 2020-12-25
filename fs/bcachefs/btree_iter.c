@@ -538,7 +538,7 @@ static void bch2_btree_iter_verify_level(struct btree_iter *iter,
 	 * For extents, the iterator may have skipped past deleted keys (but not
 	 * whiteouts)
 	 */
-	p = level || btree_node_type_is_extents(iter->btree_id)
+	p = level || btree_iter_is_extents(iter)
 		? bch2_btree_node_iter_prev_filter(&tmp, l->b, KEY_TYPE_discard)
 		: bch2_btree_node_iter_prev_all(&tmp, l->b);
 	k = bch2_btree_node_iter_peek_all(&l->iter, l->b);
@@ -719,8 +719,7 @@ fixup_done:
 	 */
 	if (!bch2_btree_node_iter_end(node_iter) &&
 	    iter_current_key_modified &&
-	    (b->c.level ||
-	     btree_node_type_is_extents(iter->btree_id))) {
+	    (b->c.level || btree_iter_is_extents(iter))) {
 		struct bset_tree *t;
 		struct bkey_packed *k, *k2, *p;
 
@@ -1955,7 +1954,7 @@ static inline void bch2_btree_iter_init(struct btree_trans *trans,
 	struct bch_fs *c = trans->c;
 	unsigned i;
 
-	if (btree_node_type_is_extents(btree_id) &&
+	if (btree_node_type_is_extents((enum btree_node_type)btree_id) &&
 	    !(flags & BTREE_ITER_NODES))
 		flags |= BTREE_ITER_IS_EXTENTS;
 
@@ -2152,7 +2151,7 @@ struct btree_iter *__bch2_trans_get_iter(struct btree_trans *trans,
 		__btree_trans_get_iter(trans, btree_id, pos, flags);
 
 	__bch2_btree_iter_set_pos(iter, pos,
-		btree_node_type_is_extents(btree_id));
+		btree_node_type_is_extents((enum btree_node_type)btree_id));
 	return iter;
 }
 

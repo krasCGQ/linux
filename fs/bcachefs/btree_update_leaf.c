@@ -407,7 +407,7 @@ bch2_trans_commit_write_locked(struct btree_trans *trans,
 			return ret;
 		}
 
-		if (btree_node_type_needs_gc(i->iter->btree_id))
+		if (btree_node_type_needs_gc(btree_iter_key_type(i->iter)))
 			marking = true;
 	}
 
@@ -988,7 +988,7 @@ int bch2_trans_update(struct btree_trans *trans, struct btree_iter *iter,
 
 	iter->flags |= BTREE_ITER_KEEP_UNTIL_COMMIT;
 
-	if (btree_node_type_is_extents(iter->btree_id)) {
+	if (btree_iter_is_extents(iter)) {
 		iter->pos_after_commit = k->k.p;
 		iter->flags |= BTREE_ITER_SET_POS_AFTER_COMMIT;
 	}
@@ -1123,7 +1123,7 @@ retry:
 		 */
 		delete.k.p = iter->pos;
 
-		if (btree_node_type_is_extents(iter->btree_id)) {
+		if (btree_iter_is_extents(iter)) {
 			unsigned max_sectors =
 				KEY_SIZE_MAX & (~0 << trans->c->block_bits);
 

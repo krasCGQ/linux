@@ -1464,7 +1464,7 @@ int bch2_btree_split_leaf(struct bch_fs *c, struct btree_iter *iter,
 	 * allocation must not block:
 	 */
 	trans_for_each_update(trans, i)
-		if (btree_node_type_needs_gc(i->iter->btree_id))
+		if (btree_node_type_needs_gc(btree_iter_key_type(i->iter)))
 			flags |= BTREE_INSERT_USE_RESERVE;
 
 	closure_init_stack(&cl);
