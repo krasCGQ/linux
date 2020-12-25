@@ -1190,19 +1190,14 @@ static struct bkey_packed *bset_search_write_set(const struct btree *b,
 static inline void prefetch_four_cachelines(void *p)
 {
 #ifdef CONFIG_X86_64
-	asm(".intel_syntax noprefix;"
-	    "prefetcht0 [%0 - 127 + 64 * 0];"
-	    "prefetcht0 [%0 - 127 + 64 * 1];"
-	    "prefetcht0 [%0 - 127 + 64 * 2];"
-	    "prefetcht0 [%0 - 127 + 64 * 3];"
-	    ".att_syntax prefix;"
-	    :
-	    : "r" (p + 127));
-#else
+	asm(".intel_syntax noprefix");
+#endif
 	prefetch(p + L1_CACHE_BYTES * 0);
 	prefetch(p + L1_CACHE_BYTES * 1);
 	prefetch(p + L1_CACHE_BYTES * 2);
 	prefetch(p + L1_CACHE_BYTES * 3);
+#ifdef CONFIG_X86_64
+	asm(".att_syntax prefix");
 #endif
 }
 
