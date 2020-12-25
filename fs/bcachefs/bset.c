@@ -1393,7 +1393,7 @@ void bch2_btree_node_iter_push(struct btree_node_iter *iter,
 	bch2_btree_node_iter_sort(iter, b);
 }
 
-noinline __flatten __attribute__((cold))
+noinline __flatten __cold
 static void btree_node_iter_init_pack_failed(struct btree_node_iter *iter,
 			      struct btree *b, struct bpos *search)
 {
@@ -1449,7 +1449,7 @@ static void btree_node_iter_init_pack_failed(struct btree_node_iter *iter,
  *    So we've got to search for start_of_range, then after the lookup iterate
  *    past any extents that compare equal to the position we searched for.
  */
-__flatten
+__flatten __cold
 void bch2_btree_node_iter_init(struct btree_node_iter *iter,
 			       struct btree *b, struct bpos *search)
 {
