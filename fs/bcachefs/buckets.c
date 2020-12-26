@@ -1548,7 +1548,7 @@ static struct btree_iter *trans_get_update(struct btree_trans *trans,
 
 	trans_for_each_update(trans, i)
 		if (i->iter->btree_id == btree_id &&
-		    (btree_node_type_is_extents((enum btree_node_type)btree_id)
+		    (btree_iter_is_extents(i->iter)
 		     ? bkey_cmp(pos, bkey_start_pos(&i->k->k)) >= 0 &&
 		       bkey_cmp(pos, i->k->k.p) < 0
 		     : !bkey_cmp(pos, i->iter->pos))) {
