@@ -1944,7 +1944,7 @@ int attr_punch_hole(struct ntfs_inode *ni, u64 vbo, u64 bytes)
 	int err = 0;
 	struct runs_tree *run = &ni->file.run;
 	struct ntfs_sb_info *sbi = ni->mi.sbi;
-	struct ATTRIB *attr, *attr_b;
+	struct ATTRIB *attr = NULL, *attr_b;
 	struct ATTR_LIST_ENTRY *le, *le_b;
 	struct mft_inode *mi, *mi_b;
 	CLST svcn, evcn1, vcn, len, end, alen, dealloc;
