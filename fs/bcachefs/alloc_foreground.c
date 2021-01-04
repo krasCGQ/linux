@@ -204,10 +204,8 @@ success:
 static inline unsigned open_buckets_reserved(enum alloc_reserve reserve)
 {
 	switch (reserve) {
-	case RESERVE_ALLOC:
+	case RESERVE_MOVINGGC:
 		return 0;
-	case RESERVE_BTREE:
-		return OPEN_BUCKETS_COUNT / 4;
 	default:
 		return OPEN_BUCKETS_COUNT / 2;
 	}
@@ -263,16 +261,6 @@ struct open_bucket *bch2_bucket_alloc(struct bch_fs *c, struct bch_dev *ca,
 		goto out;
 
 	switch (reserve) {
-	case RESERVE_ALLOC:
-		if (fifo_pop(&ca->free[RESERVE_BTREE], bucket))
-			goto out;
-		break;
-	case RESERVE_BTREE:
-		if (fifo_used(&ca->free[RESERVE_BTREE]) * 2 >=
-		    ca->free[RESERVE_BTREE].size &&
-		    fifo_pop(&ca->free[RESERVE_BTREE], bucket))
-			goto out;
-		break;
 	case RESERVE_MOVINGGC:
 		if (fifo_pop(&ca->free[RESERVE_MOVINGGC], bucket))
 			goto out;
@@ -458,16 +446,18 @@ bch2_bucket_alloc_set(struct bch_fs *c,
  * it's to a device we don't want:
  */
 
-static void bucket_alloc_from_stripe(struct bch_fs *c,
-				     struct open_buckets *ptrs,
-				     struct write_point *wp,
-				     struct bch_devs_mask *devs_may_alloc,
-				     u16 target,
-				     unsigned erasure_code,
-				     unsigned nr_replicas,
-				     unsigned *nr_effective,
-				     bool *have_cache,
-				     unsigned flags)
+static enum bucket_alloc_ret
+bucket_alloc_from_stripe(struct bch_fs *c,
+			 struct open_buckets *ptrs,
+			 struct write_point *wp,
+			 struct bch_devs_mask *devs_may_alloc,
+			 u16 target,
+			 unsigned erasure_code,
+			 unsigned nr_replicas,
+			 unsigned *nr_effective,
+			 bool *have_cache,
+			 unsigned flags,
+			 struct closure *cl)
 {
 	struct dev_alloc_list devs_sorted;
 	struct ec_stripe_head *h;
@@ -476,17 +466,21 @@ static void bucket_alloc_from_stripe(struct bch_fs *c,
 	unsigned i, ec_idx;
 
 	if (!erasure_code)
-		return;
+		return 0;
 
 	if (nr_replicas < 2)
-		return;
+		return 0;
 
 	if (ec_open_bucket(c, ptrs))
-		return;
+		return 0;
 
-	h = bch2_ec_stripe_head_get(c, target, 0, nr_replicas - 1);
+	h = bch2_ec_stripe_head_get(c, target, 0, nr_replicas - 1,
+				    wp == &c->copygc_write_point,
+				    cl);
+	if (IS_ERR(h))
+		return -PTR_ERR(h);
 	if (!h)
-		return;
+		return 0;
 
 	devs_sorted = bch2_dev_alloc_list(c, &wp->stripe, devs_may_alloc);
 
@@ -508,6 +502,7 @@ got_bucket:
 	atomic_inc(&h->s->pin);
 out_put_head:
 	bch2_ec_stripe_head_put(c, h);
+	return 0;
 }
 
 /* Sector allocator */
@@ -585,10 +580,13 @@ open_bucket_add_buckets(struct bch_fs *c,
 		}
 
 		if (!ec_open_bucket(c, ptrs)) {
-			bucket_alloc_from_stripe(c, ptrs, wp, &devs,
+			ret = bucket_alloc_from_stripe(c, ptrs, wp, &devs,
 						 target, erasure_code,
 						 nr_replicas, nr_effective,
-						 have_cache, flags);
+						 have_cache, flags, _cl);
+			if (ret == FREELIST_EMPTY ||
+			    ret == OPEN_BUCKETS_EMPTY)
+				return ret;
 			if (*nr_effective >= nr_replicas)
 				return 0;
 		}

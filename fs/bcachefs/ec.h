@@ -88,6 +88,7 @@ struct ec_stripe_new {
 	struct ec_stripe_head	*h;
 	struct mutex		lock;
 	struct list_head	list;
+	struct closure		iodone;
 
 	/* counts in flight writes, stripe is created when pin == 0 */
 	atomic_t		pin;
@@ -98,8 +99,7 @@ struct ec_stripe_new {
 	u8			nr_parity;
 	bool			allocated;
 	bool			pending;
-	bool			existing_stripe;
-	u64			existing_stripe_idx;
+	bool			have_existing_stripe;
 
 	unsigned long		blocks_allocated[BITS_TO_LONGS(BCH_BKEY_PTRS_MAX)];
 
@@ -111,7 +111,8 @@ struct ec_stripe_new {
 	struct keylist		keys;
 	u64			inline_keys[BKEY_U64s * 8];
 
-	struct ec_stripe_buf	stripe;
+	struct ec_stripe_buf	new_stripe;
+	struct ec_stripe_buf	existing_stripe;
 };
 
 struct ec_stripe_head {
@@ -121,6 +122,7 @@ struct ec_stripe_head {
 	unsigned		target;
 	unsigned		algo;
 	unsigned		redundancy;
+	bool			copygc;
 
 	struct bch_devs_mask	devs;
 	unsigned		nr_active_devs;
@@ -145,8 +147,8 @@ void bch2_ec_bucket_cancel(struct bch_fs *, struct open_bucket *);
 int bch2_ec_stripe_new_alloc(struct bch_fs *, struct ec_stripe_head *);
 
 void bch2_ec_stripe_head_put(struct bch_fs *, struct ec_stripe_head *);
-struct ec_stripe_head *bch2_ec_stripe_head_get(struct bch_fs *, unsigned,
-					       unsigned, unsigned);
+struct ec_stripe_head *bch2_ec_stripe_head_get(struct bch_fs *,
+			unsigned, unsigned, unsigned, bool, struct closure *);
 
 void bch2_stripes_heap_update(struct bch_fs *, struct stripe *, size_t);
 void bch2_stripes_heap_del(struct bch_fs *, struct stripe *, size_t);
