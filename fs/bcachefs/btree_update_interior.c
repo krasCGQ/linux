@@ -203,10 +203,10 @@ static struct btree *__bch2_btree_node_alloc(struct bch_fs *c,
 
 	if (flags & BTREE_INSERT_USE_RESERVE) {
 		nr_reserve	= 0;
-		alloc_reserve	= RESERVE_MOVINGGC;
+		alloc_reserve	= RESERVE_BTREE_MOVINGGC;
 	} else {
 		nr_reserve	= BTREE_NODE_RESERVE;
-		alloc_reserve	= RESERVE_NONE;
+		alloc_reserve	= RESERVE_BTREE;
 	}
 
 	mutex_lock(&c->btree_reserve_cache_lock);
@@ -1226,6 +1226,9 @@ static void btree_split_insert_keys(struct btree_update *as, struct btree *b,
 		}
 		src = n;
 	}
+
+	/* Also clear out the unwritten whiteouts area: */
+	b->whiteout_u64s = 0;
 
 	i->u64s = cpu_to_le16((u64 *) dst - i->_data);
 	set_btree_bset_end(b, b->set);

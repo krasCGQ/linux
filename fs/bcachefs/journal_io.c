@@ -577,8 +577,15 @@ reread:
 			if (bch2_dev_io_err_on(ret, ca,
 					       "journal read error: sector %llu",
 					       offset) ||
-			    bch2_meta_read_fault("journal"))
-				return -EIO;
+			    bch2_meta_read_fault("journal")) {
+				/*
+				 * We don't error out of the recovery process
+				 * here, since the relevant journal entry may be
+				 * found on a different device, and missing or
+				 * no journal entries will be handled later
+				 */
+				return 0;
+			}
 
 			j = buf->data;
 		}
@@ -1052,9 +1059,13 @@ static void journal_buf_realloc(struct journal *j, struct journal_buf *buf)
 		return;
 
 	memcpy(new_buf, buf->data, buf->buf_size);
-	kvpfree(buf->data, buf->buf_size);
-	buf->data	= new_buf;
-	buf->buf_size	= new_size;
+
+	spin_lock(&j->lock);
+	swap(buf->data,		new_buf);
+	swap(buf->buf_size,	new_size);
+	spin_unlock(&j->lock);
+
+	kvpfree(new_buf, new_size);
 }
 
 static inline struct journal_buf *journal_last_unwritten_buf(struct journal *j)
