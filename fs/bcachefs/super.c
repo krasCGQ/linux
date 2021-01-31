@@ -235,10 +235,7 @@ nowrote_alloc:
 	 * the journal kicks off btree writes via reclaim - wait for in flight
 	 * writes after stopping journal:
 	 */
-	if (test_bit(BCH_FS_EMERGENCY_RO, &c->flags))
-		bch2_btree_flush_all_writes(c);
-	else
-		bch2_btree_verify_flushed(c);
+	bch2_btree_flush_all_writes(c);
 
 	/*
 	 * After stopping journal:
@@ -687,6 +684,7 @@ static struct bch_fs *bch2_fs_alloc(struct bch_sb *sb, struct bch_opts opts)
 		  bch2_blacklist_entries_gc);
 
 	INIT_LIST_HEAD(&c->journal_entries);
+	INIT_LIST_HEAD(&c->journal_iters);
 
 	INIT_LIST_HEAD(&c->fsck_errors);
 	mutex_init(&c->fsck_error_lock);
@@ -1222,13 +1220,6 @@ static int bch2_dev_attach_bdev(struct bch_fs *c, struct bch_sb_handle *sb)
 	if (ret)
 		return ret;
 
-	if (test_bit(BCH_FS_ALLOC_READ_DONE, &c->flags) &&
-	    !percpu_u64_get(&ca->usage[0]->buckets[BCH_DATA_sb])) {
-		mutex_lock(&c->sb_lock);
-		bch2_mark_dev_superblock(ca->fs, ca, 0);
-		mutex_unlock(&c->sb_lock);
-	}
-
 	bch2_dev_sysfs_online(c, ca);
 
 	if (c->sb.nr_devices == 1)
@@ -1602,7 +1593,7 @@ int bch2_dev_add(struct bch_fs *c, const char *path)
 	 * allocate the journal, reset all the marks, then remark after we
 	 * attach...
 	 */
-	bch2_mark_dev_superblock(ca->fs, ca, 0);
+	bch2_mark_dev_superblock(NULL, ca, 0);
 
 	err = "journal alloc failed";
 	ret = bch2_dev_journal_alloc(ca);
@@ -1661,15 +1652,13 @@ have_slot:
 	ca->disk_sb.sb->dev_idx	= dev_idx;
 	bch2_dev_attach(c, ca, dev_idx);
 
-	bch2_mark_dev_superblock(c, ca, 0);
-
 	bch2_write_super(c);
 	mutex_unlock(&c->sb_lock);
 
-	err = "alloc write failed";
-	ret = bch2_dev_alloc_write(c, ca, 0);
+	err = "error marking superblock";
+	ret = bch2_trans_mark_dev_sb(c, NULL, ca);
 	if (ret)
-		goto err;
+		goto err_late;
 
 	if (ca->mi.state == BCH_MEMBER_STATE_RW) {
 		err = __bch2_dev_read_write(c, ca);
@@ -1690,6 +1679,7 @@ err:
 	bch_err(c, "Unable to add device: %s", err);
 	return ret;
 err_late:
+	up_write(&c->state_lock);
 	bch_err(c, "Error going rw after adding device: %s", err);
 	return -EINVAL;
 }
@@ -1725,6 +1715,12 @@ int bch2_dev_online(struct bch_fs *c, const char *path)
 	}
 
 	ca = bch_dev_locked(c, dev_idx);
+
+	if (bch2_trans_mark_dev_sb(c, NULL, ca)) {
+		err = "bch2_trans_mark_dev_sb() error";
+		goto err;
+	}
+
 	if (ca->mi.state == BCH_MEMBER_STATE_RW) {
 		err = __bch2_dev_read_write(c, ca);
 		if (err)

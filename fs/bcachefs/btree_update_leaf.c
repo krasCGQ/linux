@@ -836,7 +836,7 @@ int __bch2_trans_commit(struct btree_trans *trans)
 	int ret = 0;
 
 	if (!trans->nr_updates)
-		goto out_noupdates;
+		goto out_reset;
 
 	if (trans->flags & BTREE_INSERT_GC_LOCK_HELD)
 		lockdep_assert_held(&trans->c->gc_lock);
@@ -850,7 +850,7 @@ int __bch2_trans_commit(struct btree_trans *trans)
 	    unlikely(!percpu_ref_tryget(&trans->c->writes))) {
 		ret = bch2_trans_commit_get_rw_cold(trans);
 		if (ret)
-			return ret;
+			goto out_reset;
 	}
 
 #ifdef CONFIG_BCACHEFS_DEBUG
@@ -962,7 +962,7 @@ out:
 
 	if (likely(!(trans->flags & BTREE_INSERT_NOCHECK_RW)))
 		percpu_ref_put(&trans->c->writes);
-out_noupdates:
+out_reset:
 	bch2_trans_reset(trans, !ret ? TRANS_RESET_NOTRAVERSE : 0);
 
 	return ret;
@@ -981,10 +981,22 @@ int bch2_trans_update(struct btree_trans *trans, struct btree_iter *iter,
 		.trigger_flags = flags, .iter = iter, .k = k
 	};
 
-	EBUG_ON(bkey_cmp(iter->pos,
-			 (iter->flags & BTREE_ITER_IS_EXTENTS)
-			 ? bkey_start_pos(&k->k)
-			 : k->k.p));
+#ifdef CONFIG_BCACHEFS_DEBUG
+	BUG_ON(bkey_cmp(iter->pos,
+			(iter->flags & BTREE_ITER_IS_EXTENTS)
+			? bkey_start_pos(&k->k)
+			: k->k.p));
+
+	trans_for_each_update(trans, i) {
+		BUG_ON(bkey_cmp(i->iter->pos,
+				 (i->iter->flags & BTREE_ITER_IS_EXTENTS)
+				 ? bkey_start_pos(&i->k->k)
+				 : i->k->k.p));
+
+		BUG_ON(i != trans->updates &&
+		       btree_iter_pos_cmp(i[-1].iter, i[0].iter) >= 0);
+	}
+#endif
 
 	iter->flags |= BTREE_ITER_KEEP_UNTIL_COMMIT;
 

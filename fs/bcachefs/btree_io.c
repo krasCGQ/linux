@@ -753,6 +753,11 @@ static int validate_bset(struct bch_fs *c, struct btree *b,
 			struct bch_btree_ptr_v2 *bp =
 				&bkey_i_to_btree_ptr_v2(&b->key)->v;
 
+			if (BTREE_PTR_RANGE_UPDATED(bp)) {
+				b->data->min_key = bp->min_key;
+				b->data->max_key = b->key.k.p;
+			}
+
 			btree_err_on(bkey_cmp(b->data->min_key, bp->min_key),
 				     BTREE_ERR_MUST_RETRY, c, b, NULL,
 				     "incorrect min_key: got %llu:%llu should be %llu:%llu",
@@ -1624,7 +1629,7 @@ void __bch2_btree_node_write(struct bch_fs *c, struct btree *b,
 		validate_before_checksum = true;
 
 	/* validate_bset will be modifying: */
-	if (le16_to_cpu(i->version) < bcachefs_metadata_version_max)
+	if (le16_to_cpu(i->version) <= bcachefs_metadata_version_inode_btree_change)
 		validate_before_checksum = true;
 
 	/* if we're going to be encrypting, check metadata validity first: */
@@ -1826,23 +1831,6 @@ void bch2_btree_flush_all_reads(struct bch_fs *c)
 void bch2_btree_flush_all_writes(struct bch_fs *c)
 {
 	__bch2_btree_flush_all(c, BTREE_NODE_write_in_flight);
-}
-
-void bch2_btree_verify_flushed(struct bch_fs *c)
-{
-	struct bucket_table *tbl;
-	struct rhash_head *pos;
-	struct btree *b;
-	unsigned i;
-
-	rcu_read_lock();
-	for_each_cached_btree(b, c, tbl, i, pos) {
-		unsigned long flags = READ_ONCE(b->flags);
-
-		BUG_ON((flags & (1 << BTREE_NODE_dirty)) ||
-		       (flags & (1 << BTREE_NODE_write_in_flight)));
-	}
-	rcu_read_unlock();
 }
 
 void bch2_dirty_btree_nodes_to_text(struct printbuf *out, struct bch_fs *c)

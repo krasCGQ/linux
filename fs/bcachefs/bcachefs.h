@@ -509,7 +509,8 @@ enum {
 	BCH_FS_ERRORS_FIXED,
 
 	/* misc: */
-	BCH_FS_FIXED_GENS,
+	BCH_FS_NEED_ANOTHER_GC,
+	BCH_FS_DELETED_NODES,
 	BCH_FS_NEED_ALLOC_WRITE,
 	BCH_FS_REBUILD_REPLICAS,
 	BCH_FS_HOLD_BTREE_WRITES,
@@ -539,11 +540,13 @@ struct journal_keys {
 	struct journal_key {
 		enum btree_id	btree_id:8;
 		unsigned	level:8;
+		bool		allocated;
 		struct bkey_i	*k;
 		u32		journal_seq;
 		u32		journal_offset;
 	}			*d;
 	size_t			nr;
+	size_t			size;
 	u64			journal_seq_base;
 };
 
@@ -840,6 +843,7 @@ struct bch_fs {
 	struct journal		journal;
 	struct list_head	journal_entries;
 	struct journal_keys	journal_keys;
+	struct list_head	journal_iters;
 
 	u64			last_bucket_seq_cleanup;
 

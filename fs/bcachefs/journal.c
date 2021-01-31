@@ -9,6 +9,7 @@
 #include "alloc_foreground.h"
 #include "bkey_methods.h"
 #include "btree_gc.h"
+#include "btree_update.h"
 #include "buckets.h"
 #include "journal.h"
 #include "journal_io.h"
@@ -82,6 +83,7 @@ static void bch2_journal_buf_init(struct journal *j)
 	bkey_extent_init(&buf->key);
 	buf->noflush	= false;
 	buf->must_flush	= false;
+	buf->separate_flush = false;
 
 	memset(buf->has_inode, 0, sizeof(buf->has_inode));
 
@@ -118,6 +120,9 @@ void __bch2_journal_buf_put(struct journal *j)
 
 /*
  * Returns true if journal entry is now closed:
+ *
+ * We don't close a journal_buf until the next journal_buf is finished writing,
+ * and can be opened again - this also initializes the next journal_buf:
  */
 static bool __journal_entry_close(struct journal *j)
 {
@@ -155,6 +160,7 @@ static bool __journal_entry_close(struct journal *j)
 	} while ((v = atomic64_cmpxchg(&j->reservations.counter,
 				       old.v, new.v)) != old.v);
 
+	/* Close out old buffer: */
 	buf->data->u64s		= cpu_to_le32(old.cur_entry_offset);
 
 	sectors = vstruct_blocks_plus(buf->data, c->block_bits,
@@ -185,6 +191,7 @@ static bool __journal_entry_close(struct journal *j)
 
 	__bch2_journal_pin_put(j, le64_to_cpu(buf->data->seq));
 
+	/* Initialize new buffer: */
 	journal_pin_new_entry(j, 1);
 
 	bch2_journal_buf_init(j);
@@ -818,18 +825,28 @@ static int __bch2_set_nr_journal_buckets(struct bch_dev *ca, unsigned nr,
 		if (pos <= ja->cur_idx)
 			ja->cur_idx = (ja->cur_idx + 1) % ja->nr;
 
-		bch2_mark_metadata_bucket(c, ca, bucket, BCH_DATA_journal,
-					  ca->mi.bucket_size,
-					  gc_phase(GC_PHASE_SB),
-					  0);
+		if (!c || new_fs)
+			bch2_mark_metadata_bucket(c, ca, bucket, BCH_DATA_journal,
+						  ca->mi.bucket_size,
+						  gc_phase(GC_PHASE_SB),
+						  0);
 
 		if (c) {
 			spin_unlock(&c->journal.lock);
 			percpu_up_read(&c->mark_lock);
 		}
 
+		if (c && !new_fs)
+			ret = bch2_trans_do(c, NULL, NULL, BTREE_INSERT_NOFAIL,
+				bch2_trans_mark_metadata_bucket(&trans, NULL, ca,
+						bucket, BCH_DATA_journal,
+						ca->mi.bucket_size));
+
 		if (!new_fs)
 			bch2_open_bucket_put(c, ob);
+
+		if (ret)
+			goto err;
 	}
 err:
 	bch2_sb_resize_journal(&ca->disk_sb,
@@ -948,6 +965,7 @@ void bch2_fs_journal_stop(struct journal *j)
 	journal_quiesce(j);
 
 	BUG_ON(!bch2_journal_error(j) &&
+	       test_bit(JOURNAL_REPLAY_DONE, &j->flags) &&
 	       (journal_entry_is_open(j) ||
 		j->last_empty_seq + 1 != journal_cur_seq(j)));
 
@@ -993,13 +1011,19 @@ int bch2_fs_journal_start(struct journal *j, u64 cur_seq,
 	}
 
 	list_for_each_entry(i, journal_entries, list) {
+		unsigned ptr;
+
 		seq = le64_to_cpu(i->j.seq);
 		BUG_ON(seq >= cur_seq);
 
 		if (seq < last_seq)
 			continue;
 
-		journal_seq_pin(j, seq)->devs = i->devs;
+		p = journal_seq_pin(j, seq);
+
+		p->devs.nr = 0;
+		for (ptr = 0; ptr < i->nr_ptrs; ptr++)
+			bch2_dev_list_add_dev(&p->devs, i->ptrs[ptr].dev);
 	}
 
 	spin_lock(&j->lock);

@@ -222,7 +222,10 @@ static struct btree *__bch2_btree_node_alloc(struct bch_fs *c,
 	mutex_unlock(&c->btree_reserve_cache_lock);
 
 retry:
-	wp = bch2_alloc_sectors_start(c, c->opts.foreground_target, 0,
+	wp = bch2_alloc_sectors_start(c,
+				      c->opts.metadata_target ?:
+				      c->opts.foreground_target,
+				      0,
 				      writepoint_ptr(&c->btree_write_point),
 				      &devs_have,
 				      res->nr_replicas,
@@ -297,7 +300,6 @@ static struct btree *bch2_btree_node_alloc(struct btree_update *as, unsigned lev
 		bp->v.mem_ptr		= 0;
 		bp->v.seq		= b->data->keys.seq;
 		bp->v.sectors_written	= 0;
-		bp->v.sectors		= cpu_to_le16(c->opts.btree_node_size);
 	}
 
 	if (c->sb.features & (1ULL << BCH_FEATURE_new_extent_overwrite))

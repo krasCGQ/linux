@@ -376,25 +376,17 @@ static inline int is_unavailable_bucket(struct bucket_mark m)
 	return !is_available_bucket(m);
 }
 
-static inline int is_fragmented_bucket(struct bucket_mark m,
-				       struct bch_dev *ca)
+static inline int bucket_sectors_fragmented(struct bch_dev *ca,
+					    struct bucket_mark m)
 {
-	if (!m.owned_by_allocator &&
-	    m.data_type == BCH_DATA_user &&
-	    bucket_sectors_used(m))
-		return max_t(int, 0, (int) ca->mi.bucket_size -
-			     bucket_sectors_used(m));
-	return 0;
+	return bucket_sectors_used(m)
+		? max(0, (int) ca->mi.bucket_size - (int) bucket_sectors_used(m))
+		: 0;
 }
 
 static inline int is_stripe_data_bucket(struct bucket_mark m)
 {
 	return m.stripe && m.data_type != BCH_DATA_parity;
-}
-
-static inline int bucket_stripe_sectors(struct bucket_mark m)
-{
-	return is_stripe_data_bucket(m) ? m.dirty_sectors : 0;
 }
 
 static inline enum bch_data_type bucket_type(struct bucket_mark m)
@@ -456,7 +448,7 @@ static inline void account_bucket(struct bch_fs_usage *fs_usage,
 	if (type == BCH_DATA_sb || type == BCH_DATA_journal)
 		fs_usage->hidden	+= size;
 
-	dev_usage->buckets[type]	+= nr;
+	dev_usage->d[type].buckets	+= nr;
 }
 
 static void bch2_dev_usage_update(struct bch_fs *c, struct bch_dev *ca,
@@ -481,19 +473,18 @@ static void bch2_dev_usage_update(struct bch_fs *c, struct bch_dev *ca,
 
 	u->buckets_alloc +=
 		(int) new.owned_by_allocator - (int) old.owned_by_allocator;
+	u->buckets_ec += (int) new.stripe - (int) old.stripe;
 	u->buckets_unavailable +=
 		is_unavailable_bucket(new) - is_unavailable_bucket(old);
 
-	u->buckets_ec += (int) new.stripe - (int) old.stripe;
-	u->sectors_ec += bucket_stripe_sectors(new) -
-			 bucket_stripe_sectors(old);
-
-	u->sectors[old.data_type] -= old.dirty_sectors;
-	u->sectors[new.data_type] += new.dirty_sectors;
-	u->sectors[BCH_DATA_cached] +=
+	u->d[old.data_type].sectors -= old.dirty_sectors;
+	u->d[new.data_type].sectors += new.dirty_sectors;
+	u->d[BCH_DATA_cached].sectors +=
 		(int) new.cached_sectors - (int) old.cached_sectors;
-	u->sectors_fragmented +=
-		is_fragmented_bucket(new, ca) - is_fragmented_bucket(old, ca);
+
+	u->d[old.data_type].fragmented -= bucket_sectors_fragmented(ca, old);
+	u->d[new.data_type].fragmented += bucket_sectors_fragmented(ca, new);
+
 	preempt_enable();
 
 	if (!is_available_bucket(old) && is_available_bucket(new))
@@ -649,46 +640,6 @@ unwind:
 			ret = fn(c, __VA_ARGS__, gc);			\
 	ret;								\
 })
-
-static int __bch2_invalidate_bucket(struct bch_fs *c, struct bch_dev *ca,
-				    size_t b, struct bucket_mark *ret,
-				    bool gc)
-{
-	struct bch_fs_usage *fs_usage = fs_usage_ptr(c, 0, gc);
-	struct bucket *g = __bucket(ca, b, gc);
-	struct bucket_mark old, new;
-
-	old = bucket_cmpxchg(g, new, ({
-		BUG_ON(!is_available_bucket(new));
-
-		new.owned_by_allocator	= true;
-		new.data_type		= 0;
-		new.cached_sectors	= 0;
-		new.dirty_sectors	= 0;
-		new.gen++;
-	}));
-
-	bch2_dev_usage_update(c, ca, fs_usage, old, new, gc);
-
-	if (old.cached_sectors)
-		update_cached_sectors(c, fs_usage, ca->dev_idx,
-				      -((s64) old.cached_sectors));
-
-	if (!gc)
-		*ret = old;
-	return 0;
-}
-
-void bch2_invalidate_bucket(struct bch_fs *c, struct bch_dev *ca,
-			    size_t b, struct bucket_mark *old)
-{
-	do_mark_fn(__bch2_invalidate_bucket, c, gc_phase(GC_PHASE_START), 0,
-		   ca, b, old);
-
-	if (!old->owned_by_allocator && old->cached_sectors)
-		trace_invalidate(ca, bucket_to_sector(ca, b),
-				 old->cached_sectors);
-}
 
 static int __bch2_mark_alloc_bucket(struct bch_fs *c, struct bch_dev *ca,
 				    size_t b, bool owned_by_allocator,
@@ -1269,9 +1220,15 @@ static int bch2_mark_stripe(struct bch_fs *c,
 		m->blocks_nonempty = 0;
 
 		for (i = 0; i < new_s->nr_blocks; i++) {
-			m->block_sectors[i] =
-				stripe_blockcount_get(new_s, i);
-			m->blocks_nonempty += !!m->block_sectors[i];
+			unsigned s = stripe_blockcount_get(new_s, i);
+
+			/*
+			 * gc recalculates this field from stripe ptr
+			 * references:
+			 */
+			if (!gc)
+				m->block_sectors[i] = s;
+			m->blocks_nonempty += !!s;
 		}
 
 		if (gc && old_s)
@@ -1652,7 +1609,7 @@ out:
 }
 
 static int bch2_trans_mark_stripe_ptr(struct btree_trans *trans,
-			struct bch_extent_stripe_ptr p,
+			struct extent_ptr_decoded p,
 			s64 sectors, enum bch_data_type data_type)
 {
 	struct bch_fs *c = trans->c;
@@ -1662,14 +1619,22 @@ static int bch2_trans_mark_stripe_ptr(struct btree_trans *trans,
 	struct bch_replicas_padded r;
 	int ret = 0;
 
-	ret = trans_get_key(trans, BTREE_ID_EC, POS(0, p.idx), &iter, &k);
+	ret = trans_get_key(trans, BTREE_ID_EC, POS(0, p.ec.idx), &iter, &k);
 	if (ret < 0)
 		return ret;
 
 	if (k.k->type != KEY_TYPE_stripe) {
 		bch2_fs_inconsistent(c,
 			"pointer to nonexistent stripe %llu",
-			(u64) p.idx);
+			(u64) p.ec.idx);
+		ret = -EIO;
+		goto out;
+	}
+
+	if (!bch2_ptr_matches_stripe(bkey_s_c_to_stripe(k).v, p)) {
+		bch2_fs_inconsistent(c,
+			"stripe pointer doesn't match stripe %llu",
+			(u64) p.ec.idx);
 		ret = -EIO;
 		goto out;
 	}
@@ -1680,8 +1645,8 @@ static int bch2_trans_mark_stripe_ptr(struct btree_trans *trans,
 		goto out;
 
 	bkey_reassemble(&s->k_i, k);
-	stripe_blockcount_set(&s->v, p.block,
-		stripe_blockcount_get(&s->v, p.block) +
+	stripe_blockcount_set(&s->v, p.ec.block,
+		stripe_blockcount_get(&s->v, p.ec.block) +
 		sectors);
 	bch2_trans_update(trans, iter, &s->k_i, 0);
 
@@ -1732,7 +1697,7 @@ static int bch2_trans_mark_extent(struct btree_trans *trans,
 			dirty_sectors	       += disk_sectors;
 			r.e.devs[r.e.nr_devs++]	= p.ptr.dev;
 		} else {
-			ret = bch2_trans_mark_stripe_ptr(trans, p.ec,
+			ret = bch2_trans_mark_stripe_ptr(trans, p,
 					disk_sectors, data_type);
 			if (ret)
 				return ret;
@@ -2092,6 +2057,168 @@ int bch2_trans_mark_update(struct btree_trans *trans,
 	return ret;
 }
 
+static int __bch2_trans_mark_metadata_bucket(struct btree_trans *trans,
+				    struct bch_dev *ca, size_t b,
+				    enum bch_data_type type,
+				    unsigned sectors)
+{
+	struct bch_fs *c = trans->c;
+	struct btree_iter *iter;
+	struct bkey_alloc_unpacked u;
+	struct bkey_i_alloc *a;
+	struct bch_extent_ptr ptr = {
+		.dev = ca->dev_idx,
+		.offset = bucket_to_sector(ca, b),
+	};
+	int ret = 0;
+
+	a = bch2_trans_kmalloc(trans, BKEY_ALLOC_U64s_MAX * 8);
+	ret = PTR_ERR_OR_ZERO(a);
+	if (ret)
+		return ret;
+
+	ret = bch2_trans_start_alloc_update(trans, &iter, &ptr, &u);
+	if (ret)
+		return ret;
+
+	if (u.data_type && u.data_type != type) {
+		bch2_fsck_err(c, FSCK_CAN_IGNORE|FSCK_NEED_FSCK,
+			"bucket %llu:%llu gen %u different types of data in same bucket: %s, %s\n"
+			"while marking %s",
+			iter->pos.inode, iter->pos.offset, u.gen,
+			bch2_data_types[u.data_type],
+			bch2_data_types[type],
+			bch2_data_types[type]);
+		ret = -EIO;
+		goto out;
+	}
+
+	if ((unsigned) (u.dirty_sectors + sectors) > ca->mi.bucket_size) {
+		bch2_fsck_err(c, FSCK_CAN_IGNORE|FSCK_NEED_FSCK,
+			"bucket %llu:%llu gen %u data type %s sector count overflow: %u + %u > %u\n"
+			"while marking %s",
+			iter->pos.inode, iter->pos.offset, u.gen,
+			bch2_data_types[u.data_type ?: type],
+			u.dirty_sectors, sectors, ca->mi.bucket_size,
+			bch2_data_types[type]);
+		ret = -EIO;
+		goto out;
+	}
+
+	if (u.data_type		== type &&
+	    u.dirty_sectors	== sectors)
+		goto out;
+
+	u.data_type	= type;
+	u.dirty_sectors	= sectors;
+
+	bkey_alloc_init(&a->k_i);
+	a->k.p = iter->pos;
+	bch2_alloc_pack(a, u);
+	bch2_trans_update(trans, iter, &a->k_i, 0);
+out:
+	bch2_trans_iter_put(trans, iter);
+	return ret;
+}
+
+int bch2_trans_mark_metadata_bucket(struct btree_trans *trans,
+				    struct disk_reservation *res,
+				    struct bch_dev *ca, size_t b,
+				    enum bch_data_type type,
+				    unsigned sectors)
+{
+	return __bch2_trans_do(trans, res, NULL, 0,
+			__bch2_trans_mark_metadata_bucket(trans, ca, b, BCH_DATA_journal,
+							ca->mi.bucket_size));
+
+}
+
+static int bch2_trans_mark_metadata_sectors(struct btree_trans *trans,
+					    struct disk_reservation *res,
+					    struct bch_dev *ca,
+					    u64 start, u64 end,
+					    enum bch_data_type type,
+					    u64 *bucket, unsigned *bucket_sectors)
+{
+	int ret;
+
+	do {
+		u64 b = sector_to_bucket(ca, start);
+		unsigned sectors =
+			min_t(u64, bucket_to_sector(ca, b + 1), end) - start;
+
+		if (b != *bucket) {
+			if (*bucket_sectors) {
+				ret = bch2_trans_mark_metadata_bucket(trans, res, ca,
+						*bucket, type, *bucket_sectors);
+				if (ret)
+					return ret;
+			}
+
+			*bucket		= b;
+			*bucket_sectors	= 0;
+		}
+
+		*bucket_sectors	+= sectors;
+		start += sectors;
+	} while (!ret && start < end);
+
+	return 0;
+}
+
+static int __bch2_trans_mark_dev_sb(struct btree_trans *trans,
+			     struct disk_reservation *res,
+			     struct bch_dev *ca)
+{
+	struct bch_sb_layout *layout = &ca->disk_sb.sb->layout;
+	u64 bucket = 0;
+	unsigned i, bucket_sectors = 0;
+	int ret;
+
+	for (i = 0; i < layout->nr_superblocks; i++) {
+		u64 offset = le64_to_cpu(layout->sb_offset[i]);
+
+		if (offset == BCH_SB_SECTOR) {
+			ret = bch2_trans_mark_metadata_sectors(trans, res, ca,
+						0, BCH_SB_SECTOR,
+						BCH_DATA_sb, &bucket, &bucket_sectors);
+			if (ret)
+				return ret;
+		}
+
+		ret = bch2_trans_mark_metadata_sectors(trans, res, ca, offset,
+				      offset + (1 << layout->sb_max_size_bits),
+				      BCH_DATA_sb, &bucket, &bucket_sectors);
+		if (ret)
+			return ret;
+	}
+
+	if (bucket_sectors) {
+		ret = bch2_trans_mark_metadata_bucket(trans, res, ca,
+				bucket, BCH_DATA_sb, bucket_sectors);
+		if (ret)
+			return ret;
+	}
+
+	for (i = 0; i < ca->journal.nr; i++) {
+		ret = bch2_trans_mark_metadata_bucket(trans, res, ca,
+				ca->journal.buckets[i],
+				BCH_DATA_journal, ca->mi.bucket_size);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+int bch2_trans_mark_dev_sb(struct bch_fs *c,
+			   struct disk_reservation *res,
+			   struct bch_dev *ca)
+{
+	return bch2_trans_do(c, res, NULL, 0,
+			__bch2_trans_mark_dev_sb(&trans, res, ca));
+}
+
 /* Disk reservations: */
 
 void __bch2_disk_reservation_put(struct bch_fs *c, struct disk_reservation *res)
@@ -2107,7 +2234,7 @@ void __bch2_disk_reservation_put(struct bch_fs *c, struct disk_reservation *res)
 #define SECTORS_CACHE	1024
 
 int bch2_disk_reservation_add(struct bch_fs *c, struct disk_reservation *res,
-			      unsigned sectors, int flags)
+			      u64 sectors, int flags)
 {
 	struct bch_fs_pcpu *pcpu;
 	u64 old, v, get;
