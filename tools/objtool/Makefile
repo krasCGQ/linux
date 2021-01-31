@@ -3,15 +3,6 @@ include ../scripts/Makefile.include
 include ../scripts/Makefile.arch
 
 # always use the host compiler
-ifneq ($(LLVM),)
-HOSTAR	?= llvm-ar$(CC_SUFFIX)
-HOSTCC	?= clang$(CC_SUFFIX)
-HOSTLD	?= ld.lld$(CC_SUFFIX)
-else
-HOSTAR	?= ar
-HOSTCC	?= gcc$(CC_SUFFIX)
-HOSTLD	?= ld
-endif
 AR	 = $(HOSTAR)
 CC	 = $(HOSTCC)
 LD	 = $(HOSTLD)

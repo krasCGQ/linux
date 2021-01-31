@@ -59,6 +59,16 @@ $(call allow-override,LD,$(CROSS_COMPILE)ld)
 $(call allow-override,CXX,$(CROSS_COMPILE)g++)
 $(call allow-override,STRIP,$(CROSS_COMPILE)strip)
 
+ifneq ($(LLVM),)
+HOSTAR  ?= llvm-ar$(CC_SUFFIX)
+HOSTCC  ?= clang$(CC_SUFFIX)
+HOSTLD  ?= ld.lld$(CC_SUFFIX)
+else
+HOSTAR  ?= ar
+HOSTCC  ?= gcc$(CC_SUFFIX)
+HOSTLD  ?= ld
+endif
+
 ifeq ($(CC_NO_CLANG), 1)
 EXTRA_WARNINGS += -Wstrict-aliasing=3
 endif
