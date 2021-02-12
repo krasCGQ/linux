@@ -1176,10 +1176,10 @@ out:
 	return ERR_PTR(err);
 }
 
-int ntfs_create_inode(struct user_namespace *mnt_userns, struct inode *dir,
-		      struct dentry *dentry, const struct cpu_str *uni,
-		      umode_t mode, dev_t dev, const char *symname, u32 size,
-		      int excl, struct ntfs_fnd *fnd, struct inode **new_inode)
+int ntfs_create_inode(struct inode *dir, struct dentry *dentry,
+		      const struct cpu_str *uni, umode_t mode, dev_t dev,
+		      const char *symname, u32 size, int excl,
+		      struct ntfs_fnd *fnd, struct inode **new_inode)
 {
 	int err;
 	struct super_block *sb = dir->i_sb;
@@ -1584,7 +1584,7 @@ int ntfs_create_inode(struct user_namespace *mnt_userns, struct inode *dir,
 
 #ifdef CONFIG_NTFS3_FS_POSIX_ACL
 	if (!is_link && (sb->s_flags & SB_POSIXACL)) {
-		err = ntfs_init_acl(mnt_userns, inode, dir);
+		err = ntfs_init_acl(inode, dir);
 		if (err)
 			goto out6;
 	} else
