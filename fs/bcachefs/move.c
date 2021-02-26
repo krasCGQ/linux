@@ -579,7 +579,7 @@ peek:
 		if (!bkey_extent_is_direct_data(k.k))
 			goto next_nondata;
 
-		if (btree_id == BTREE_ID_EXTENTS &&
+		if (btree_id == BTREE_ID_extents &&
 		    cur_inum != k.k->p.inode) {
 			struct bch_inode_unpacked inode;
 
@@ -664,9 +664,9 @@ int bch2_move_data(struct bch_fs *c,
 	stats->data_type = BCH_DATA_user;
 
 	ret =   __bch2_move_data(c, &ctxt, rate, wp, start, end,
-				 pred, arg, stats, BTREE_ID_EXTENTS) ?:
+				 pred, arg, stats, BTREE_ID_extents) ?:
 		__bch2_move_data(c, &ctxt, rate, wp, start, end,
-				 pred, arg, stats, BTREE_ID_REFLINK);
+				 pred, arg, stats, BTREE_ID_reflink);
 
 	move_ctxt_wait_event(&ctxt, list_empty(&ctxt.reads));
 	closure_sync(&ctxt.cl);

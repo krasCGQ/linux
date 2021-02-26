@@ -199,9 +199,6 @@ read_attribute(new_stripes);
 
 rw_attribute(pd_controllers_update_seconds);
 
-read_attribute(meta_replicas_have);
-read_attribute(data_replicas_have);
-
 read_attribute(io_timers_read);
 read_attribute(io_timers_write);
 
@@ -264,7 +261,7 @@ static int bch2_compression_stats_to_text(struct printbuf *out, struct bch_fs *c
 
 	bch2_trans_init(&trans, c, 0, 0);
 
-	for_each_btree_key(&trans, iter, BTREE_ID_EXTENTS, POS_MIN, 0, k, ret)
+	for_each_btree_key(&trans, iter, BTREE_ID_extents, POS_MIN, 0, k, ret)
 		if (k.k->type == KEY_TYPE_extent) {
 			struct bkey_s_c_extent e = bkey_s_c_to_extent(k);
 			const union bch_extent_entry *entry;
@@ -346,9 +343,6 @@ SHOW(bch2_fs)
 	}
 
 	sysfs_print(promote_whole_extents,	c->promote_whole_extents);
-
-	sysfs_printf(meta_replicas_have, "%i",	bch2_replicas_online(c, true));
-	sysfs_printf(data_replicas_have, "%i",	bch2_replicas_online(c, false));
 
 	/* Debugging: */
 
@@ -519,9 +513,6 @@ struct attribute *bch2_fs_files[] = {
 	&sysfs_block_size,
 	&sysfs_btree_node_size,
 	&sysfs_btree_cache_size,
-
-	&sysfs_meta_replicas_have,
-	&sysfs_data_replicas_have,
 
 	&sysfs_journal_write_delay_ms,
 	&sysfs_journal_reclaim_delay_ms,
@@ -705,7 +696,7 @@ static unsigned bucket_last_io_fn(struct bch_fs *c, struct bch_dev *ca,
 {
 	int rw = (private ? 1 : 0);
 
-	return bucket_last_io(c, bucket(ca, b), rw);
+	return atomic64_read(&c->io_clock[rw].now) - bucket(ca, b)->io_time[rw];
 }
 
 static unsigned bucket_sectors_used_fn(struct bch_fs *c, struct bch_dev *ca,
@@ -718,7 +709,7 @@ static unsigned bucket_sectors_used_fn(struct bch_fs *c, struct bch_dev *ca,
 static unsigned bucket_oldest_gen_fn(struct bch_fs *c, struct bch_dev *ca,
 				     size_t b, void *private)
 {
-	return bucket_gc_gen(ca, b);
+	return bucket_gc_gen(bucket(ca, b));
 }
 
 static int unsigned_cmp(const void *_l, const void *_r)
@@ -898,7 +889,7 @@ SHOW(bch2_dev)
 	}
 
 	if (attr == &sysfs_state_rw) {
-		bch2_string_opt_to_text(&out, bch2_dev_state,
+		bch2_string_opt_to_text(&out, bch2_member_states,
 					ca->mi.state);
 		pr_buf(&out, "\n");
 		return out.pos - buf;

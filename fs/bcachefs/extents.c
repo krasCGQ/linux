@@ -677,7 +677,7 @@ bool bch2_check_range_allocated(struct bch_fs *c, struct bpos pos, u64 size,
 
 	bch2_trans_init(&trans, c, 0, 0);
 
-	for_each_btree_key(&trans, iter, BTREE_ID_EXTENTS, pos,
+	for_each_btree_key(&trans, iter, BTREE_ID_extents, pos,
 			   BTREE_ITER_SLOTS, k, err) {
 		if (bkey_cmp(bkey_start_pos(k.k), end) >= 0)
 			break;
@@ -704,14 +704,8 @@ unsigned bch2_bkey_replicas(struct bch_fs *c, struct bkey_s_c k)
 		if (p.ptr.cached)
 			continue;
 
-		if (p.has_ec) {
-			struct stripe *s =
-				genradix_ptr(&c->stripes[0], p.ec.idx);
-
-			WARN_ON(!s);
-			if (s)
-				replicas += s->nr_redundant;
-		}
+		if (p.has_ec)
+			replicas += p.ec.redundancy;
 
 		replicas++;
 
@@ -731,19 +725,12 @@ static unsigned bch2_extent_ptr_durability(struct bch_fs *c,
 
 	ca = bch_dev_bkey_exists(c, p.ptr.dev);
 
-	if (ca->mi.state != BCH_MEMBER_STATE_FAILED)
+	if (ca->mi.state != BCH_MEMBER_STATE_failed)
 		durability = max_t(unsigned, durability, ca->mi.durability);
 
-	if (p.has_ec) {
-		struct stripe *s =
-			genradix_ptr(&c->stripes[0], p.ec.idx);
+	if (p.has_ec)
+		durability += p.ec.redundancy;
 
-		if (WARN_ON(!s))
-			goto out;
-
-		durability += s->nr_redundant;
-	}
-out:
 	return durability;
 }
 
@@ -789,6 +776,15 @@ void bch2_bkey_mark_replicas_cached(struct bch_fs *c, struct bkey_s k,
 				extra -= n;
 			}
 		}
+}
+
+void bch2_bkey_extent_entry_drop(struct bkey_i *k, union bch_extent_entry *entry)
+{
+	union bch_extent_entry *end = bkey_val_end(bkey_i_to_s(k));
+	union bch_extent_entry *next = extent_entry_next(entry);
+
+	memmove_u64s(entry, next, (u64 *) end - (u64 *) next);
+	k->k.u64s -= extent_entry_u64s(entry);
 }
 
 void bch2_bkey_append_ptr(struct bkey_i *k,
@@ -976,9 +972,9 @@ bool bch2_extent_normalize(struct bch_fs *c, struct bkey_s k)
 
 	/* will only happen if all pointers were cached: */
 	if (!bch2_bkey_nr_ptrs(k.s_c))
-		k.k->type = KEY_TYPE_discard;
+		k.k->type = KEY_TYPE_deleted;
 
-	return bkey_whiteout(k.k);
+	return bkey_deleted(k.k);
 }
 
 void bch2_bkey_ptrs_to_text(struct printbuf *out, struct bch_fs *c,

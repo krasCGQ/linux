@@ -90,7 +90,7 @@ void __bch2_btree_calc_format(struct bkey_format_state *s, struct btree *b)
 
 	for_each_bset(b, t)
 		bset_tree_for_each_key(b, t, k)
-			if (!bkey_whiteout(k)) {
+			if (!bkey_deleted(k)) {
 				uk = bkey_unpack_key(b, k);
 				bch2_bkey_format_add_key(s, &uk);
 			}
@@ -302,14 +302,7 @@ static struct btree *bch2_btree_node_alloc(struct btree_update *as, unsigned lev
 		bp->v.sectors_written	= 0;
 	}
 
-	if (c->sb.features & (1ULL << BCH_FEATURE_new_extent_overwrite))
-		SET_BTREE_NODE_NEW_EXTENT_OVERWRITE(b->data, true);
-
-	if (btree_node_is_extents(b) &&
-	    !BTREE_NODE_NEW_EXTENT_OVERWRITE(b->data)) {
-		set_btree_node_old_extent_overwrite(b);
-		set_btree_node_need_rewrite(b);
-	}
+	SET_BTREE_NODE_NEW_EXTENT_OVERWRITE(b->data, true);
 
 	bch2_btree_build_aux_trees(b);
 
@@ -1202,7 +1195,7 @@ static void btree_split_insert_keys(struct btree_update *as, struct btree *b,
 	struct bkey_packed *src, *dst, *n;
 	struct bset *i;
 
-	BUG_ON(btree_node_type(b) != BKEY_TYPE_BTREE);
+	BUG_ON(btree_node_type(b) != BKEY_TYPE_btree);
 
 	bch2_btree_node_iter_init(&node_iter, b, &k->k.p);
 

@@ -148,6 +148,23 @@ struct bch_fs *bch2_uuid_to_fs(uuid_le uuid)
 	return c;
 }
 
+static void bch2_dev_usage_journal_reserve(struct bch_fs *c)
+{
+	struct bch_dev *ca;
+	unsigned i, nr = 0, u64s =
+		((sizeof(struct jset_entry_dev_usage) +
+		  sizeof(struct jset_entry_dev_usage_type) * BCH_DATA_NR)) /
+		sizeof(u64);
+
+	rcu_read_lock();
+	for_each_member_device_rcu(ca, c, i, NULL)
+		nr++;
+	rcu_read_unlock();
+
+	bch2_journal_entry_res_resize(&c->journal,
+			&c->dev_usage_journal_res, u64s * nr);
+}
+
 /* Filesystem RO/RW: */
 
 /*
@@ -173,9 +190,6 @@ static void __bch2_fs_read_only(struct bch_fs *c)
 	bch2_rebalance_stop(c);
 	bch2_copygc_stop(c);
 	bch2_gc_thread_stop(c);
-
-	bch2_io_timer_del(&c->io_clock[READ], &c->bucket_clock[READ].rescale);
-	bch2_io_timer_del(&c->io_clock[WRITE], &c->bucket_clock[WRITE].rescale);
 
 	/*
 	 * Flush journal before stopping allocators, because flushing journal
@@ -398,9 +412,6 @@ static int __bch2_fs_read_write(struct bch_fs *c, bool early)
 	for_each_rw_member(ca, c, i)
 		bch2_dev_allocator_add(c, ca);
 	bch2_recalc_capacity(c);
-
-	bch2_io_timer_add(&c->io_clock[READ], &c->bucket_clock[READ].rescale);
-	bch2_io_timer_add(&c->io_clock[WRITE], &c->bucket_clock[WRITE].rescale);
 
 	for_each_rw_member(ca, c, i) {
 		ret = bch2_dev_allocator_start(ca);
@@ -784,6 +795,14 @@ static struct bch_fs *bch2_fs_alloc(struct bch_sb *sb, struct bch_opts opts)
 		if (bch2_dev_exists(c->disk_sb.sb, mi, i) &&
 		    bch2_dev_alloc(c, i))
 			goto err;
+
+	bch2_journal_entry_res_resize(&c->journal,
+			&c->btree_root_journal_res,
+			BTREE_ID_NR * (JSET_KEYS_U64s + BKEY_BTREE_PTR_U64s_MAX));
+	bch2_dev_usage_journal_reserve(c);
+	bch2_journal_entry_res_resize(&c->journal,
+			&c->clock_journal_res,
+			(sizeof(struct jset_entry_clock) / sizeof(u64)) * 2);
 
 	mutex_lock(&bch_fs_list_lock);
 	err = bch2_fs_online(c);
@@ -1245,23 +1264,22 @@ bool bch2_dev_state_allowed(struct bch_fs *c, struct bch_dev *ca,
 			    enum bch_member_state new_state, int flags)
 {
 	struct bch_devs_mask new_online_devs;
-	struct replicas_status s;
 	struct bch_dev *ca2;
 	int i, nr_rw = 0, required;
 
 	lockdep_assert_held(&c->state_lock);
 
 	switch (new_state) {
-	case BCH_MEMBER_STATE_RW:
+	case BCH_MEMBER_STATE_rw:
 		return true;
-	case BCH_MEMBER_STATE_RO:
-		if (ca->mi.state != BCH_MEMBER_STATE_RW)
+	case BCH_MEMBER_STATE_ro:
+		if (ca->mi.state != BCH_MEMBER_STATE_rw)
 			return true;
 
 		/* do we have enough devices to write to?  */
 		for_each_member_device(ca2, c, i)
 			if (ca2 != ca)
-				nr_rw += ca2->mi.state == BCH_MEMBER_STATE_RW;
+				nr_rw += ca2->mi.state == BCH_MEMBER_STATE_rw;
 
 		required = max(!(flags & BCH_FORCE_IF_METADATA_DEGRADED)
 			       ? c->opts.metadata_replicas
@@ -1271,19 +1289,17 @@ bool bch2_dev_state_allowed(struct bch_fs *c, struct bch_dev *ca,
 			       : c->opts.data_replicas_required);
 
 		return nr_rw >= required;
-	case BCH_MEMBER_STATE_FAILED:
-	case BCH_MEMBER_STATE_SPARE:
-		if (ca->mi.state != BCH_MEMBER_STATE_RW &&
-		    ca->mi.state != BCH_MEMBER_STATE_RO)
+	case BCH_MEMBER_STATE_failed:
+	case BCH_MEMBER_STATE_spare:
+		if (ca->mi.state != BCH_MEMBER_STATE_rw &&
+		    ca->mi.state != BCH_MEMBER_STATE_ro)
 			return true;
 
 		/* do we have enough devices to read from?  */
 		new_online_devs = bch2_online_devs(c);
 		__clear_bit(ca->dev_idx, new_online_devs.d);
 
-		s = __bch2_replicas_status(c, new_online_devs);
-
-		return bch2_have_enough_devs(s, flags);
+		return bch2_have_enough_devs(c, new_online_devs, flags, false);
 	default:
 		BUG();
 	}
@@ -1291,14 +1307,18 @@ bool bch2_dev_state_allowed(struct bch_fs *c, struct bch_dev *ca,
 
 static bool bch2_fs_may_start(struct bch_fs *c)
 {
-	struct replicas_status s;
 	struct bch_sb_field_members *mi;
 	struct bch_dev *ca;
-	unsigned i, flags = c->opts.degraded
-		? BCH_FORCE_IF_DEGRADED
-		: 0;
+	unsigned i, flags = 0;
 
-	if (!c->opts.degraded) {
+	if (c->opts.very_degraded)
+		flags |= BCH_FORCE_IF_DEGRADED|BCH_FORCE_IF_LOST;
+
+	if (c->opts.degraded)
+		flags |= BCH_FORCE_IF_DEGRADED;
+
+	if (!c->opts.degraded &&
+	    !c->opts.very_degraded) {
 		mutex_lock(&c->sb_lock);
 		mi = bch2_sb_get_members(c->disk_sb.sb);
 
@@ -1309,8 +1329,8 @@ static bool bch2_fs_may_start(struct bch_fs *c)
 			ca = bch_dev_locked(c, i);
 
 			if (!bch2_dev_is_online(ca) &&
-			    (ca->mi.state == BCH_MEMBER_STATE_RW ||
-			     ca->mi.state == BCH_MEMBER_STATE_RO)) {
+			    (ca->mi.state == BCH_MEMBER_STATE_rw ||
+			     ca->mi.state == BCH_MEMBER_STATE_ro)) {
 				mutex_unlock(&c->sb_lock);
 				return false;
 			}
@@ -1318,9 +1338,7 @@ static bool bch2_fs_may_start(struct bch_fs *c)
 		mutex_unlock(&c->sb_lock);
 	}
 
-	s = bch2_replicas_status(c);
-
-	return bch2_have_enough_devs(s, flags);
+	return bch2_have_enough_devs(c, bch2_online_devs(c), flags, true);
 }
 
 static void __bch2_dev_read_only(struct bch_fs *c, struct bch_dev *ca)
@@ -1345,7 +1363,7 @@ static const char *__bch2_dev_read_write(struct bch_fs *c, struct bch_dev *ca)
 {
 	lockdep_assert_held(&c->state_lock);
 
-	BUG_ON(ca->mi.state != BCH_MEMBER_STATE_RW);
+	BUG_ON(ca->mi.state != BCH_MEMBER_STATE_rw);
 
 	bch2_dev_allocator_add(c, ca);
 	bch2_recalc_capacity(c);
@@ -1368,10 +1386,10 @@ int __bch2_dev_set_state(struct bch_fs *c, struct bch_dev *ca,
 	if (!bch2_dev_state_allowed(c, ca, new_state, flags))
 		return -EINVAL;
 
-	if (new_state != BCH_MEMBER_STATE_RW)
+	if (new_state != BCH_MEMBER_STATE_rw)
 		__bch2_dev_read_only(c, ca);
 
-	bch_notice(ca, "%s", bch2_dev_state[new_state]);
+	bch_notice(ca, "%s", bch2_member_states[new_state]);
 
 	mutex_lock(&c->sb_lock);
 	mi = bch2_sb_get_members(c->disk_sb.sb);
@@ -1379,7 +1397,7 @@ int __bch2_dev_set_state(struct bch_fs *c, struct bch_dev *ca,
 	bch2_write_super(c);
 	mutex_unlock(&c->sb_lock);
 
-	if (new_state == BCH_MEMBER_STATE_RW &&
+	if (new_state == BCH_MEMBER_STATE_rw &&
 	    __bch2_dev_read_write(c, ca))
 		ret = -ENOMEM;
 
@@ -1412,7 +1430,7 @@ int bch2_dev_remove_alloc(struct bch_fs *c, struct bch_dev *ca)
 
 	for (i = 0; i < ca->mi.nbuckets; i++) {
 		ret = bch2_btree_key_cache_flush(&trans,
-				BTREE_ID_ALLOC, POS(ca->dev_idx, i));
+				BTREE_ID_alloc, POS(ca->dev_idx, i));
 		if (ret)
 			break;
 	}
@@ -1421,7 +1439,7 @@ int bch2_dev_remove_alloc(struct bch_fs *c, struct bch_dev *ca)
 	if (ret)
 		return ret;
 
-	return bch2_btree_delete_range(c, BTREE_ID_ALLOC,
+	return bch2_btree_delete_range(c, BTREE_ID_alloc,
 				       POS(ca->dev_idx, 0),
 				       POS(ca->dev_idx + 1, 0),
 				       NULL);
@@ -1441,7 +1459,7 @@ int bch2_dev_remove(struct bch_fs *c, struct bch_dev *ca, int flags)
 	 */
 	percpu_ref_put(&ca->ref);
 
-	if (!bch2_dev_state_allowed(c, ca, BCH_MEMBER_STATE_FAILED, flags)) {
+	if (!bch2_dev_state_allowed(c, ca, BCH_MEMBER_STATE_failed, flags)) {
 		bch_err(ca, "Cannot remove without losing data");
 		goto err;
 	}
@@ -1521,26 +1539,15 @@ int bch2_dev_remove(struct bch_fs *c, struct bch_dev *ca, int flags)
 
 	mutex_unlock(&c->sb_lock);
 	up_write(&c->state_lock);
+
+	bch2_dev_usage_journal_reserve(c);
 	return 0;
 err:
-	if (ca->mi.state == BCH_MEMBER_STATE_RW &&
+	if (ca->mi.state == BCH_MEMBER_STATE_rw &&
 	    !percpu_ref_is_zero(&ca->io_ref))
 		__bch2_dev_read_write(c, ca);
 	up_write(&c->state_lock);
 	return ret;
-}
-
-static void dev_usage_clear(struct bch_dev *ca)
-{
-	struct bucket_array *buckets;
-
-	percpu_memset(ca->usage[0], 0, sizeof(*ca->usage[0]));
-
-	down_read(&ca->bucket_lock);
-	buckets = bucket_array(ca);
-
-	memset(buckets->b, 0, sizeof(buckets->b[0]) * buckets->nbuckets);
-	up_read(&ca->bucket_lock);
 }
 
 /* Add new device to running filesystem: */
@@ -1600,8 +1607,6 @@ int bch2_dev_add(struct bch_fs *c, const char *path)
 	if (ret)
 		goto err;
 
-	dev_usage_clear(ca);
-
 	down_write(&c->state_lock);
 	mutex_lock(&c->sb_lock);
 
@@ -1655,12 +1660,14 @@ have_slot:
 	bch2_write_super(c);
 	mutex_unlock(&c->sb_lock);
 
+	bch2_dev_usage_journal_reserve(c);
+
 	err = "error marking superblock";
 	ret = bch2_trans_mark_dev_sb(c, NULL, ca);
 	if (ret)
 		goto err_late;
 
-	if (ca->mi.state == BCH_MEMBER_STATE_RW) {
+	if (ca->mi.state == BCH_MEMBER_STATE_rw) {
 		err = __bch2_dev_read_write(c, ca);
 		if (err)
 			goto err_late;
@@ -1721,7 +1728,7 @@ int bch2_dev_online(struct bch_fs *c, const char *path)
 		goto err;
 	}
 
-	if (ca->mi.state == BCH_MEMBER_STATE_RW) {
+	if (ca->mi.state == BCH_MEMBER_STATE_rw) {
 		err = __bch2_dev_read_write(c, ca);
 		if (err)
 			goto err;
@@ -1755,7 +1762,7 @@ int bch2_dev_offline(struct bch_fs *c, struct bch_dev *ca, int flags)
 		return 0;
 	}
 
-	if (!bch2_dev_state_allowed(c, ca, BCH_MEMBER_STATE_FAILED, flags)) {
+	if (!bch2_dev_state_allowed(c, ca, BCH_MEMBER_STATE_failed, flags)) {
 		bch_err(ca, "Cannot offline required disk");
 		up_write(&c->state_lock);
 		return -EINVAL;
