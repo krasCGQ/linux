@@ -575,6 +575,8 @@ int bch2_journal_flush_seq_async(struct journal *j, u64 seq,
 
 	spin_lock(&j->lock);
 
+	BUG_ON(seq > journal_cur_seq(j));
+
 	/* Recheck under lock: */
 	if (j->err_seq && seq >= j->err_seq) {
 		ret = -EIO;
@@ -640,9 +642,10 @@ int bch2_journal_flush_seq(struct journal *j, u64 seq)
 	u64 start_time = local_clock();
 	int ret, ret2;
 
-	ret = wait_event_killable(j->wait, (ret2 = bch2_journal_flush_seq_async(j, seq, NULL)));
+	ret = wait_event_interruptible(j->wait, (ret2 = bch2_journal_flush_seq_async(j, seq, NULL)));
 
-	bch2_time_stats_update(j->flush_seq_time, start_time);
+	if (!ret)
+		bch2_time_stats_update(j->flush_seq_time, start_time);
 
 	return ret ?: ret2 < 0 ? ret2 : 0;
 }
@@ -1117,10 +1120,6 @@ int bch2_fs_journal_init(struct journal *j)
 	j->write_delay_ms	= 1000;
 	j->reclaim_delay_ms	= 100;
 
-	/* Btree roots: */
-	j->entry_u64s_reserved +=
-		BTREE_ID_NR * (JSET_KEYS_U64s + BKEY_BTREE_PTR_U64s_MAX);
-
 	atomic64_set(&j->reservations.counter,
 		((union journal_res_state)
 		 { .cur_entry_offset = JOURNAL_ENTRY_CLOSED_VAL }).v);
@@ -1162,6 +1161,7 @@ void __bch2_journal_debug_to_text(struct printbuf *out, struct journal *j)
 	       "seq:\t\t\t%llu\n"
 	       "last_seq:\t\t%llu\n"
 	       "last_seq_ondisk:\t%llu\n"
+	       "flushed_seq_ondisk:\t%llu\n"
 	       "prereserved:\t\t%u/%u\n"
 	       "nr flush writes:\t%llu\n"
 	       "nr noflush writes:\t%llu\n"
@@ -1174,6 +1174,7 @@ void __bch2_journal_debug_to_text(struct printbuf *out, struct journal *j)
 	       journal_cur_seq(j),
 	       journal_last_seq(j),
 	       j->last_seq_ondisk,
+	       j->flushed_seq_ondisk,
 	       j->prereserved.reserved,
 	       j->prereserved.remaining,
 	       j->nr_flush_writes,

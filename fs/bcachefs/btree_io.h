@@ -134,7 +134,8 @@ void bch2_btree_build_aux_trees(struct btree *);
 void bch2_btree_init_next(struct bch_fs *, struct btree *,
 			 struct btree_iter *);
 
-int bch2_btree_node_read_done(struct bch_fs *, struct btree *, bool);
+int bch2_btree_node_read_done(struct bch_fs *, struct bch_dev *,
+			      struct btree *, bool);
 void bch2_btree_node_read(struct bch_fs *, struct btree *, bool);
 int bch2_btree_root_read(struct bch_fs *, enum btree_id,
 			 const struct bkey_i *, unsigned);
@@ -192,7 +193,7 @@ static inline void compat_bformat(unsigned level, enum btree_id btree_id,
 				 int write, struct bkey_format *f)
 {
 	if (version < bcachefs_metadata_version_inode_btree_change &&
-	    btree_id == BTREE_ID_INODES) {
+	    btree_id == BTREE_ID_inodes) {
 		swap(f->bits_per_field[BKEY_FIELD_INODE],
 		     f->bits_per_field[BKEY_FIELD_OFFSET]);
 		swap(f->field_offset[BKEY_FIELD_INODE],
@@ -208,7 +209,7 @@ static inline void compat_bpos(unsigned level, enum btree_id btree_id,
 		bch2_bpos_swab(p);
 
 	if (version < bcachefs_metadata_version_inode_btree_change &&
-	    btree_id == BTREE_ID_INODES)
+	    btree_id == BTREE_ID_inodes)
 		swap(p->inode, p->offset);
 }
 

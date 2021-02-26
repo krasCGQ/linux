@@ -882,7 +882,7 @@ void bch2_readahead(struct readahead_control *ractl)
 
 	bch2_trans_init(&trans, c, 0, 0);
 
-	iter = bch2_trans_get_iter(&trans, BTREE_ID_EXTENTS, POS_MIN,
+	iter = bch2_trans_get_iter(&trans, BTREE_ID_extents, POS_MIN,
 				   BTREE_ITER_SLOTS);
 
 	bch2_pagecache_add_get(&inode->ei_pagecache_lock);
@@ -928,7 +928,7 @@ static void __bchfs_readpage(struct bch_fs *c, struct bch_read_bio *rbio,
 	BUG_ON(!bio_add_page(&rbio->bio, page, PAGE_SIZE, 0));
 
 	bch2_trans_init(&trans, c, 0, 0);
-	iter = bch2_trans_get_iter(&trans, BTREE_ID_EXTENTS, POS_MIN,
+	iter = bch2_trans_get_iter(&trans, BTREE_ID_extents, POS_MIN,
 				   BTREE_ITER_SLOTS);
 
 	bchfs_read(&trans, iter, rbio, inum, NULL);
@@ -2132,7 +2132,7 @@ static inline int range_has_data(struct bch_fs *c,
 
 	bch2_trans_init(&trans, c, 0, 0);
 
-	for_each_btree_key(&trans, iter, BTREE_ID_EXTENTS, start, 0, k, ret) {
+	for_each_btree_key(&trans, iter, BTREE_ID_extents, start, 0, k, ret) {
 		if (bkey_cmp(bkey_start_pos(k.k), end) >= 0)
 			break;
 
@@ -2440,7 +2440,7 @@ static long bchfs_fcollapse_finsert(struct bch_inode_info *inode,
 	struct address_space *mapping = inode->v.i_mapping;
 	struct bkey_buf copy;
 	struct btree_trans trans;
-	struct btree_iter *src, *dst;
+	struct btree_iter *src, *dst, *del;
 	loff_t shift, new_size;
 	u64 src_start;
 	int ret;
@@ -2506,10 +2506,11 @@ static long bchfs_fcollapse_finsert(struct bch_inode_info *inode,
 			goto err;
 	}
 
-	src = bch2_trans_get_iter(&trans, BTREE_ID_EXTENTS,
+	src = bch2_trans_get_iter(&trans, BTREE_ID_extents,
 			POS(inode->v.i_ino, src_start >> 9),
 			BTREE_ITER_INTENT);
 	dst = bch2_trans_copy_iter(&trans, src);
+	del = bch2_trans_copy_iter(&trans, src);
 
 	while (1) {
 		struct disk_reservation disk_res =
@@ -2529,8 +2530,6 @@ static long bchfs_fcollapse_finsert(struct bch_inode_info *inode,
 
 		if (!k.k || k.k->p.inode != inode->v.i_ino)
 			break;
-
-		BUG_ON(bkey_cmp(src->pos, bkey_start_pos(k.k)));
 
 		if (insert &&
 		    bkey_cmp(k.k->p, POS(inode->v.i_ino, offset >> 9)) <= 0)
@@ -2563,6 +2562,7 @@ reassemble:
 		delete.k.p = copy.k->k.p;
 		delete.k.size = copy.k->k.size;
 		delete.k.p.offset -= shift >> 9;
+		bch2_btree_iter_set_pos(del, bkey_start_pos(&delete.k));
 
 		next_pos = insert ? bkey_start_pos(&delete.k) : delete.k.p;
 
@@ -2583,9 +2583,7 @@ reassemble:
 			BUG_ON(ret);
 		}
 
-		bch2_btree_iter_set_pos(src, bkey_start_pos(&delete.k));
-
-		ret =   bch2_trans_update(&trans, src, &delete, trigger_flags) ?:
+		ret =   bch2_trans_update(&trans, del, &delete, trigger_flags) ?:
 			bch2_trans_update(&trans, dst, copy.k, trigger_flags) ?:
 			bch2_trans_commit(&trans, &disk_res,
 					  &inode->ei_journal_seq,
@@ -2663,7 +2661,7 @@ static long bchfs_fallocate(struct bch_inode_info *inode, int mode,
 		truncate_pagecache_range(&inode->v, offset, end - 1);
 	}
 
-	iter = bch2_trans_get_iter(&trans, BTREE_ID_EXTENTS,
+	iter = bch2_trans_get_iter(&trans, BTREE_ID_extents,
 			POS(inode->v.i_ino, block_start >> 9),
 			BTREE_ITER_SLOTS|BTREE_ITER_INTENT);
 	end_pos = POS(inode->v.i_ino, block_end >> 9);
@@ -2996,7 +2994,7 @@ static loff_t bch2_seek_data(struct file *file, u64 offset)
 
 	bch2_trans_init(&trans, c, 0, 0);
 
-	for_each_btree_key(&trans, iter, BTREE_ID_EXTENTS,
+	for_each_btree_key(&trans, iter, BTREE_ID_extents,
 			   POS(inode->v.i_ino, offset >> 9), 0, k, ret) {
 		if (k.k->p.inode != inode->v.i_ino) {
 			break;
@@ -3091,7 +3089,7 @@ static loff_t bch2_seek_hole(struct file *file, u64 offset)
 
 	bch2_trans_init(&trans, c, 0, 0);
 
-	for_each_btree_key(&trans, iter, BTREE_ID_EXTENTS,
+	for_each_btree_key(&trans, iter, BTREE_ID_extents,
 			   POS(inode->v.i_ino, offset >> 9),
 			   BTREE_ITER_SLOTS, k, ret) {
 		if (k.k->p.inode != inode->v.i_ino) {

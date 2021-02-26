@@ -24,8 +24,7 @@
 
 static void verify_no_dups(struct btree *b,
 			   struct bkey_packed *start,
-			   struct bkey_packed *end,
-			   bool extents)
+			   struct bkey_packed *end)
 {
 #ifdef CONFIG_BCACHEFS_DEBUG
 	struct bkey_packed *k, *p;
@@ -39,10 +38,7 @@ static void verify_no_dups(struct btree *b,
 		struct bkey l = bkey_unpack_key(b, p);
 		struct bkey r = bkey_unpack_key(b, k);
 
-		BUG_ON(extents
-		       ? bkey_cmp(l.p, bkey_start_pos(&r)) > 0
-		       : bkey_cmp(l.p, bkey_start_pos(&r)) >= 0);
-		//BUG_ON(bch2_bkey_cmp_packed(&b->format, p, k) >= 0);
+		BUG_ON(bkey_cmp(l.p, bkey_start_pos(&r)) >= 0);
 	}
 #endif
 }
@@ -150,8 +146,7 @@ static void bch2_sort_whiteouts(struct bch_fs *c, struct btree *b)
 	}
 
 	verify_no_dups(b, new_whiteouts,
-		       (void *) ((u64 *) new_whiteouts + b->whiteout_u64s),
-		       btree_node_old_extent_overwrite(b));
+		       (void *) ((u64 *) new_whiteouts + b->whiteout_u64s));
 
 	memcpy_u64s(unwritten_whiteouts_start(c, b),
 		    new_whiteouts, b->whiteout_u64s);
@@ -174,144 +169,6 @@ static bool should_compact_bset(struct btree *b, struct bset_tree *t,
 	default:
 		BUG();
 	}
-}
-
-static bool bch2_compact_extent_whiteouts(struct bch_fs *c,
-					  struct btree *b,
-					  enum compact_mode mode)
-{
-	const struct bkey_format *f = &b->format;
-	struct bset_tree *t;
-	struct bkey_packed *whiteouts = NULL;
-	struct bkey_packed *u_start, *u_pos;
-	struct sort_iter sort_iter;
-	unsigned bytes, whiteout_u64s = 0, u64s;
-	bool used_mempool, compacting = false;
-
-	BUG_ON(!btree_node_is_extents(b));
-
-	for_each_bset(b, t)
-		if (should_compact_bset(b, t, whiteout_u64s != 0, mode))
-			whiteout_u64s += bset_dead_u64s(b, t);
-
-	if (!whiteout_u64s)
-		return false;
-
-	bch2_sort_whiteouts(c, b);
-
-	sort_iter_init(&sort_iter, b);
-
-	whiteout_u64s += b->whiteout_u64s;
-	bytes = whiteout_u64s * sizeof(u64);
-
-	whiteouts = btree_bounce_alloc(c, bytes, &used_mempool);
-	u_start = u_pos = whiteouts;
-
-	memcpy_u64s(u_pos, unwritten_whiteouts_start(c, b),
-		    b->whiteout_u64s);
-	u_pos = (void *) u_pos + b->whiteout_u64s * sizeof(u64);
-
-	sort_iter_add(&sort_iter, u_start, u_pos);
-
-	for_each_bset(b, t) {
-		struct bset *i = bset(b, t);
-		struct bkey_packed *k, *n, *out, *start, *end;
-		struct btree_node_entry *src = NULL, *dst = NULL;
-
-		if (t != b->set && !bset_written(b, i)) {
-			src = container_of(i, struct btree_node_entry, keys);
-			dst = max(write_block(b),
-				  (void *) btree_bkey_last(b, t - 1));
-		}
-
-		if (src != dst)
-			compacting = true;
-
-		if (!should_compact_bset(b, t, compacting, mode)) {
-			if (src != dst) {
-				memmove(dst, src, sizeof(*src) +
-					le16_to_cpu(src->keys.u64s) *
-					sizeof(u64));
-				i = &dst->keys;
-				set_btree_bset(b, t, i);
-			}
-			continue;
-		}
-
-		compacting = true;
-		u_start = u_pos;
-		start = i->start;
-		end = vstruct_last(i);
-
-		if (src != dst) {
-			memmove(dst, src, sizeof(*src));
-			i = &dst->keys;
-			set_btree_bset(b, t, i);
-		}
-
-		out = i->start;
-
-		for (k = start; k != end; k = n) {
-			n = bkey_next_skip_noops(k, end);
-
-			if (bkey_deleted(k))
-				continue;
-
-			BUG_ON(bkey_whiteout(k) &&
-			       k->needs_whiteout &&
-			       bkey_written(b, k));
-
-			if (bkey_whiteout(k) && !k->needs_whiteout)
-				continue;
-
-			if (bkey_whiteout(k)) {
-				memcpy_u64s(u_pos, k, bkeyp_key_u64s(f, k));
-				set_bkeyp_val_u64s(f, u_pos, 0);
-				u_pos = bkey_next(u_pos);
-			} else {
-				bkey_copy(out, k);
-				out = bkey_next(out);
-			}
-		}
-
-		sort_iter_add(&sort_iter, u_start, u_pos);
-
-		i->u64s = cpu_to_le16((u64 *) out - i->_data);
-		set_btree_bset_end(b, t);
-		bch2_bset_set_no_aux_tree(b, t);
-	}
-
-	b->whiteout_u64s = (u64 *) u_pos - (u64 *) whiteouts;
-
-	BUG_ON((void *) unwritten_whiteouts_start(c, b) <
-	       (void *) btree_bkey_last(b, bset_tree_last(b)));
-
-	u64s = bch2_sort_extent_whiteouts(unwritten_whiteouts_start(c, b),
-					  &sort_iter);
-
-	BUG_ON(u64s > b->whiteout_u64s);
-	BUG_ON(u_pos != whiteouts && !u64s);
-
-	if (u64s != b->whiteout_u64s) {
-		void *src = unwritten_whiteouts_start(c, b);
-
-		b->whiteout_u64s = u64s;
-		memmove_u64s_up(unwritten_whiteouts_start(c, b), src, u64s);
-	}
-
-	verify_no_dups(b,
-		       unwritten_whiteouts_start(c, b),
-		       unwritten_whiteouts_end(c, b),
-		       true);
-
-	btree_bounce_free(c, bytes, used_mempool, whiteouts);
-
-	bch2_btree_build_aux_trees(b);
-
-	bch_btree_keys_u64s_remaining(c, b);
-	bch2_verify_btree_nr_keys(b);
-
-	return true;
 }
 
 static bool bch2_drop_whiteouts(struct btree *b, enum compact_mode mode)
@@ -358,7 +215,7 @@ static bool bch2_drop_whiteouts(struct btree *b, enum compact_mode mode)
 		for (k = start; k != end; k = n) {
 			n = bkey_next_skip_noops(k, end);
 
-			if (!bkey_whiteout(k)) {
+			if (!bkey_deleted(k)) {
 				bkey_copy(out, k);
 				out = bkey_next(out);
 			} else {
@@ -382,9 +239,7 @@ static bool bch2_drop_whiteouts(struct btree *b, enum compact_mode mode)
 bool bch2_compact_whiteouts(struct bch_fs *c, struct btree *b,
 			    enum compact_mode mode)
 {
-	return !btree_node_old_extent_overwrite(b)
-		? bch2_drop_whiteouts(b, mode)
-		: bch2_compact_extent_whiteouts(c, b, mode);
+	return bch2_drop_whiteouts(b, mode);
 }
 
 static void btree_node_sort(struct bch_fs *c, struct btree *b,
@@ -422,14 +277,7 @@ static void btree_node_sort(struct bch_fs *c, struct btree *b,
 
 	start_time = local_clock();
 
-	if (btree_node_old_extent_overwrite(b))
-		filter_whiteouts = bset_written(b, start_bset);
-
-	u64s = (btree_node_old_extent_overwrite(b)
-		? bch2_sort_extents
-		: bch2_sort_keys)(out->keys.start,
-				  &sort_iter,
-				  filter_whiteouts);
+	u64s = bch2_sort_keys(out->keys.start, &sort_iter, filter_whiteouts);
 
 	out->keys.u64s = cpu_to_le16(u64s);
 
@@ -608,11 +456,16 @@ static void btree_pos_to_text(struct printbuf *out, struct bch_fs *c,
 }
 
 static void btree_err_msg(struct printbuf *out, struct bch_fs *c,
+			  struct bch_dev *ca,
 			  struct btree *b, struct bset *i,
 			  unsigned offset, int write)
 {
-	pr_buf(out, "error validating btree node %sat btree ",
-	       write ? "before write " : "");
+	pr_buf(out, "error validating btree node ");
+	if (write)
+		pr_buf(out, "before write ");
+	if (ca)
+		pr_buf(out, "on %s ", ca->name);
+	pr_buf(out, "at btree ");
 	btree_pos_to_text(out, c, b);
 
 	pr_buf(out, "\n  node offset %u", b->written);
@@ -631,7 +484,7 @@ enum btree_validate_ret {
 	BTREE_RETRY_READ = 64,
 };
 
-#define btree_err(type, c, b, i, msg, ...)				\
+#define btree_err(type, c, ca, b, i, msg, ...)				\
 ({									\
 	__label__ out;							\
 	char _buf[300];							\
@@ -642,7 +495,7 @@ enum btree_validate_ret {
 	if (buf2)							\
 		out = _PBUF(buf2, 4986);				\
 									\
-	btree_err_msg(&out, c, b, i, b->written, write);		\
+	btree_err_msg(&out, c, ca, b, i, b->written, write);		\
 	pr_buf(&out, ": " msg, ##__VA_ARGS__);				\
 									\
 	if (type == BTREE_ERR_FIXABLE &&				\
@@ -691,9 +544,9 @@ out:									\
 
 #define btree_err_on(cond, ...)	((cond) ? btree_err(__VA_ARGS__) : false)
 
-static int validate_bset(struct bch_fs *c, struct btree *b,
-			 struct bset *i, unsigned sectors,
-			 int write, bool have_retry)
+static int validate_bset(struct bch_fs *c, struct bch_dev *ca,
+			 struct btree *b, struct bset *i,
+			 unsigned sectors, int write, bool have_retry)
 {
 	unsigned version = le16_to_cpu(i->version);
 	const char *err;
@@ -702,18 +555,18 @@ static int validate_bset(struct bch_fs *c, struct btree *b,
 	btree_err_on((version != BCH_BSET_VERSION_OLD &&
 		      version < bcachefs_metadata_version_min) ||
 		     version >= bcachefs_metadata_version_max,
-		     BTREE_ERR_FATAL, c, b, i,
+		     BTREE_ERR_FATAL, c, ca, b, i,
 		     "unsupported bset version");
 
 	if (btree_err_on(b->written + sectors > c->opts.btree_node_size,
-			 BTREE_ERR_FIXABLE, c, b, i,
+			 BTREE_ERR_FIXABLE, c, ca, b, i,
 			 "bset past end of btree node")) {
 		i->u64s = 0;
 		return 0;
 	}
 
 	btree_err_on(b->written && !i->u64s,
-		     BTREE_ERR_FIXABLE, c, b, i,
+		     BTREE_ERR_FIXABLE, c, ca, b, i,
 		     "empty bset");
 
 	if (!b->written) {
@@ -727,16 +580,16 @@ static int validate_bset(struct bch_fs *c, struct btree *b,
 
 			/* XXX endianness */
 			btree_err_on(bp->seq != bn->keys.seq,
-				     BTREE_ERR_MUST_RETRY, c, b, NULL,
+				     BTREE_ERR_MUST_RETRY, c, ca, b, NULL,
 				     "incorrect sequence number (wrong btree node)");
 		}
 
 		btree_err_on(BTREE_NODE_ID(bn) != b->c.btree_id,
-			     BTREE_ERR_MUST_RETRY, c, b, i,
+			     BTREE_ERR_MUST_RETRY, c, ca, b, i,
 			     "incorrect btree id");
 
 		btree_err_on(BTREE_NODE_LEVEL(bn) != b->c.level,
-			     BTREE_ERR_MUST_RETRY, c, b, i,
+			     BTREE_ERR_MUST_RETRY, c, ca, b, i,
 			     "incorrect level");
 
 		if (BSET_BIG_ENDIAN(i) != CPU_BIG_ENDIAN) {
@@ -759,7 +612,7 @@ static int validate_bset(struct bch_fs *c, struct btree *b,
 			}
 
 			btree_err_on(bkey_cmp(b->data->min_key, bp->min_key),
-				     BTREE_ERR_MUST_RETRY, c, b, NULL,
+				     BTREE_ERR_MUST_RETRY, c, ca, b, NULL,
 				     "incorrect min_key: got %llu:%llu should be %llu:%llu",
 				     b->data->min_key.inode,
 				     b->data->min_key.offset,
@@ -768,7 +621,7 @@ static int validate_bset(struct bch_fs *c, struct btree *b,
 		}
 
 		btree_err_on(bkey_cmp(bn->max_key, b->key.k.p),
-			     BTREE_ERR_MUST_RETRY, c, b, i,
+			     BTREE_ERR_MUST_RETRY, c, ca, b, i,
 			     "incorrect max key %llu:%llu",
 			     bn->max_key.inode,
 			     bn->max_key.offset);
@@ -793,7 +646,7 @@ static int validate_bset(struct bch_fs *c, struct btree *b,
 #endif
 		err = bch2_bkey_format_validate(&bn->format);
 		btree_err_on(err,
-			     BTREE_ERR_FATAL, c, b, i,
+			     BTREE_ERR_FATAL, c, ca, b, i,
 			     "invalid bkey format: %s", err);
 
 		compat_bformat(b->c.level, b->c.btree_id, version,
@@ -825,14 +678,14 @@ static int validate_bset_keys(struct bch_fs *c, struct btree *b,
 		const char *invalid;
 
 		if (btree_err_on(bkey_next(k) > vstruct_last(i),
-				 BTREE_ERR_FIXABLE, c, b, i,
+				 BTREE_ERR_FIXABLE, c, NULL, b, i,
 				 "key extends past end of bset")) {
 			i->u64s = cpu_to_le16((u64 *) k - i->_data);
 			break;
 		}
 
 		if (btree_err_on(k->format > KEY_FORMAT_CURRENT,
-				 BTREE_ERR_FIXABLE, c, b, i,
+				 BTREE_ERR_FIXABLE, c, NULL, b, i,
 				 "invalid bkey format %u", k->format)) {
 			i->u64s = cpu_to_le16(le16_to_cpu(i->u64s) - k->u64s);
 			memmove_u64s_down(k, bkey_next(k),
@@ -855,7 +708,7 @@ static int validate_bset_keys(struct bch_fs *c, struct btree *b,
 			char buf[160];
 
 			bch2_bkey_val_to_text(&PBUF(buf), c, u.s_c);
-			btree_err(BTREE_ERR_FIXABLE, c, b, i,
+			btree_err(BTREE_ERR_FIXABLE, c, NULL, b, i,
 				  "invalid bkey: %s\n%s", invalid, buf);
 
 			i->u64s = cpu_to_le16(le16_to_cpu(i->u64s) - k->u64s);
@@ -872,11 +725,11 @@ static int validate_bset_keys(struct bch_fs *c, struct btree *b,
 		/*
 		 * with the separate whiteouts thing (used for extents), the
 		 * second set of keys actually can have whiteouts too, so we
-		 * can't solely go off bkey_whiteout()...
+		 * can't solely go off bkey_deleted()...
 		 */
 
 		if (!seen_non_whiteout &&
-		    (!bkey_whiteout(k) ||
+		    (!bkey_deleted(k) ||
 		     (prev && bkey_iter_cmp(b, prev, k) > 0))) {
 			*whiteout_u64s = k->_data - i->_data;
 			seen_non_whiteout = true;
@@ -889,7 +742,7 @@ static int validate_bset_keys(struct bch_fs *c, struct btree *b,
 			bch2_bkey_to_text(&PBUF(buf2), u.k);
 
 			bch2_dump_bset(c, b, i, 0);
-			btree_err(BTREE_ERR_FATAL, c, b, i,
+			btree_err(BTREE_ERR_FATAL, c, NULL, b, i,
 				  "keys out of order: %s > %s",
 				  buf1, buf2);
 			/* XXX: repair this */
@@ -902,7 +755,8 @@ fsck_err:
 	return ret;
 }
 
-int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry)
+int bch2_btree_node_read_done(struct bch_fs *c, struct bch_dev *ca,
+			      struct btree *b, bool have_retry)
 {
 	struct btree_node_entry *bne;
 	struct sort_iter *iter;
@@ -919,15 +773,15 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 	iter->size = (btree_blocks(c) + 1) * 2;
 
 	if (bch2_meta_read_fault("btree"))
-		btree_err(BTREE_ERR_MUST_RETRY, c, b, NULL,
+		btree_err(BTREE_ERR_MUST_RETRY, c, ca, b, NULL,
 			  "dynamic fault");
 
 	btree_err_on(le64_to_cpu(b->data->magic) != bset_magic(c),
-		     BTREE_ERR_MUST_RETRY, c, b, NULL,
+		     BTREE_ERR_MUST_RETRY, c, ca, b, NULL,
 		     "bad magic");
 
 	btree_err_on(!b->data->keys.seq,
-		     BTREE_ERR_MUST_RETRY, c, b, NULL,
+		     BTREE_ERR_MUST_RETRY, c, ca, b, NULL,
 		     "bad btree header");
 
 	if (b->key.k.type == KEY_TYPE_btree_ptr_v2) {
@@ -935,7 +789,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 			&bkey_i_to_btree_ptr_v2(&b->key)->v;
 
 		btree_err_on(b->data->keys.seq != bp->seq,
-			     BTREE_ERR_MUST_RETRY, c, b, NULL,
+			     BTREE_ERR_MUST_RETRY, c, ca, b, NULL,
 			     "got wrong btree node (seq %llx want %llx)",
 			     b->data->keys.seq, bp->seq);
 	}
@@ -950,7 +804,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 			i = &b->data->keys;
 
 			btree_err_on(!bch2_checksum_type_valid(c, BSET_CSUM_TYPE(i)),
-				     BTREE_ERR_WANT_RETRY, c, b, i,
+				     BTREE_ERR_WANT_RETRY, c, ca, b, i,
 				     "unknown checksum type %llu",
 				     BSET_CSUM_TYPE(i));
 
@@ -958,16 +812,15 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 			csum = csum_vstruct(c, BSET_CSUM_TYPE(i), nonce, b->data);
 
 			btree_err_on(bch2_crc_cmp(csum, b->data->csum),
-				     BTREE_ERR_WANT_RETRY, c, b, i,
+				     BTREE_ERR_WANT_RETRY, c, ca, b, i,
 				     "invalid checksum");
 
 			bset_encrypt(c, i, b->written << 9);
 
-			if (btree_node_is_extents(b) &&
-			    !BTREE_NODE_NEW_EXTENT_OVERWRITE(b->data)) {
-				set_btree_node_old_extent_overwrite(b);
-				set_btree_node_need_rewrite(b);
-			}
+			btree_err_on(btree_node_is_extents(b) &&
+				     !BTREE_NODE_NEW_EXTENT_OVERWRITE(b->data),
+				     BTREE_ERR_FATAL, c, NULL, b, NULL,
+				     "btree node does not have NEW_EXTENT_OVERWRITE set");
 
 			sectors = vstruct_sectors(b->data, c->block_bits);
 		} else {
@@ -978,7 +831,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 				break;
 
 			btree_err_on(!bch2_checksum_type_valid(c, BSET_CSUM_TYPE(i)),
-				     BTREE_ERR_WANT_RETRY, c, b, i,
+				     BTREE_ERR_WANT_RETRY, c, ca, b, i,
 				     "unknown checksum type %llu",
 				     BSET_CSUM_TYPE(i));
 
@@ -986,7 +839,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 			csum = csum_vstruct(c, BSET_CSUM_TYPE(i), nonce, bne);
 
 			btree_err_on(bch2_crc_cmp(csum, bne->csum),
-				     BTREE_ERR_WANT_RETRY, c, b, i,
+				     BTREE_ERR_WANT_RETRY, c, ca, b, i,
 				     "invalid checksum");
 
 			bset_encrypt(c, i, b->written << 9);
@@ -994,7 +847,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 			sectors = vstruct_sectors(bne, c->block_bits);
 		}
 
-		ret = validate_bset(c, b, i, sectors,
+		ret = validate_bset(c, ca, b, i, sectors,
 				    READ, have_retry);
 		if (ret)
 			goto fsck_err;
@@ -1016,7 +869,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 					true);
 
 		btree_err_on(blacklisted && first,
-			     BTREE_ERR_FIXABLE, c, b, i,
+			     BTREE_ERR_FIXABLE, c, ca, b, i,
 			     "first btree node bset has blacklisted journal seq");
 		if (blacklisted && !first)
 			continue;
@@ -1033,7 +886,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 	     bset_byte_offset(b, bne) < btree_bytes(c);
 	     bne = (void *) bne + block_bytes(c))
 		btree_err_on(bne->keys.seq == b->data->keys.seq,
-			     BTREE_ERR_WANT_RETRY, c, b, NULL,
+			     BTREE_ERR_WANT_RETRY, c, ca, b, NULL,
 			     "found bset signature after last bset");
 
 	sorted = btree_bounce_alloc(c, btree_bytes(c), &used_mempool);
@@ -1041,9 +894,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 
 	set_btree_bset(b, b->set, &b->data->keys);
 
-	b->nr = (btree_node_old_extent_overwrite(b)
-		 ? bch2_extent_sort_fix_overlapping
-		 : bch2_key_sort_fix_overlapping)(c, &sorted->keys, iter);
+	b->nr = bch2_key_sort_fix_overlapping(c, &sorted->keys, iter);
 
 	u64s = le16_to_cpu(sorted->keys.u64s);
 	*sorted = *b->data;
@@ -1068,7 +919,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 			char buf[160];
 
 			bch2_bkey_val_to_text(&PBUF(buf), c, u.s_c);
-			btree_err(BTREE_ERR_FIXABLE, c, b, i,
+			btree_err(BTREE_ERR_FIXABLE, c, NULL, b, i,
 				  "invalid bkey %s: %s", buf, invalid);
 
 			btree_keys_account_key_drop(&b->nr, 0, k);
@@ -1098,7 +949,7 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct btree *b, bool have_retry
 	bkey_for_each_ptr(bch2_bkey_ptrs(bkey_i_to_s(&b->key)), ptr) {
 		struct bch_dev *ca = bch_dev_bkey_exists(c, ptr->dev);
 
-		if (ca->mi.state != BCH_MEMBER_STATE_RW)
+		if (ca->mi.state != BCH_MEMBER_STATE_rw)
 			set_btree_node_need_rewrite(b);
 	}
 out:
@@ -1159,7 +1010,7 @@ start:
 				&failed, &rb->pick) > 0;
 
 		if (!bio->bi_status &&
-		    !bch2_btree_node_read_done(c, b, can_retry))
+		    !bch2_btree_node_read_done(c, ca, b, can_retry))
 			break;
 
 		if (!can_retry) {
@@ -1462,10 +1313,10 @@ static int validate_bset_for_write(struct bch_fs *c, struct btree *b,
 	unsigned whiteout_u64s = 0;
 	int ret;
 
-	if (bch2_bkey_invalid(c, bkey_i_to_s_c(&b->key), BKEY_TYPE_BTREE))
+	if (bch2_bkey_invalid(c, bkey_i_to_s_c(&b->key), BKEY_TYPE_btree))
 		return -1;
 
-	ret = validate_bset(c, b, i, sectors, WRITE, false) ?:
+	ret = validate_bset(c, NULL, b, i, sectors, WRITE, false) ?:
 		validate_bset_keys(c, b, i, &whiteout_u64s, WRITE, false);
 	if (ret) {
 		bch2_inconsistent_error(c);
@@ -1584,24 +1435,14 @@ void __bch2_btree_node_write(struct bch_fs *c, struct btree *b,
 	i->journal_seq	= cpu_to_le64(seq);
 	i->u64s		= 0;
 
-	if (!btree_node_old_extent_overwrite(b)) {
-		sort_iter_add(&sort_iter,
-			      unwritten_whiteouts_start(c, b),
-			      unwritten_whiteouts_end(c, b));
-		SET_BSET_SEPARATE_WHITEOUTS(i, false);
-	} else {
-		memcpy_u64s(i->start,
-			    unwritten_whiteouts_start(c, b),
-			    b->whiteout_u64s);
-		i->u64s = cpu_to_le16(b->whiteout_u64s);
-		SET_BSET_SEPARATE_WHITEOUTS(i, true);
-	}
+	sort_iter_add(&sort_iter,
+		      unwritten_whiteouts_start(c, b),
+		      unwritten_whiteouts_end(c, b));
+	SET_BSET_SEPARATE_WHITEOUTS(i, false);
 
 	b->whiteout_u64s = 0;
 
-	u64s = btree_node_old_extent_overwrite(b)
-		? bch2_sort_extents(vstruct_last(i), &sort_iter, false)
-		: bch2_sort_keys(i->start, &sort_iter, false);
+	u64s = bch2_sort_keys(i->start, &sort_iter, false);
 	le16_add_cpu(&i->u64s, u64s);
 
 	set_needs_whiteout(i, false);
