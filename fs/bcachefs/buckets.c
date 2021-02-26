@@ -1444,7 +1444,7 @@ void bch2_trans_fs_usage_apply(struct btree_trans *trans,
 			int ret;
 
 			for_each_btree_key_continue(copy, 0, k, ret) {
-				if (btree_node_type_is_extents(i->iter->btree_id)
+				if (btree_iter_is_extents(i->iter)
 				    ? bkey_cmp(i->k->k.p, bkey_start_pos(k.k)) <= 0
 				    : bkey_cmp(i->k->k.p, k.k->p))
 					break;
@@ -1735,8 +1735,8 @@ static int bch2_trans_mark_stripe(struct btree_trans *trans,
 				  struct bkey_s_c old, struct bkey_s_c new,
 				  unsigned flags)
 {
-	struct bkey_s_c_stripe old_s = { NULL };
-	struct bkey_s_c_stripe new_s = { NULL };
+	struct bkey_s_c_stripe old_s = { {{ NULL }} };
+	struct bkey_s_c_stripe new_s = { {{ NULL }} };
 	struct bch_replicas_padded r;
 	unsigned i;
 	int ret = 0;
