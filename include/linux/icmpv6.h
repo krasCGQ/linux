@@ -18,10 +18,10 @@ static inline struct icmp6hdr *icmp6_hdr(const struct sk_buff *skb)
 typedef void ip6_icmp_send_t(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 			     const struct in6_addr *force_saddr,
 			     const struct inet6_skb_parm *parm);
-#if IS_BUILTIN(CONFIG_IPV6)
 void icmp6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 		const struct in6_addr *force_saddr,
 		const struct inet6_skb_parm *parm);
+#if IS_BUILTIN(CONFIG_IPV6)
 static inline void __icmpv6_send(struct sk_buff *skb, u8 type, u8 code, __u32 info,
 				 const struct inet6_skb_parm *parm)
 {
