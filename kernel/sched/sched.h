@@ -2,10 +2,6 @@
 /*
  * Scheduler internal types and methods:
  */
-#ifdef CONFIG_SCHED_ALT
-#include "alt_sched.h"
-#else
-
 #include <linux/sched.h>
 
 #include <linux/sched/autogroup.h>
@@ -2631,9 +2627,3 @@ static inline bool is_per_cpu_kthread(struct task_struct *p)
 
 void swake_up_all_locked(struct swait_queue_head *q);
 void __prepare_to_swait(struct swait_queue_head *q, struct swait_queue *wait);
-
-static inline int task_running_nice(struct task_struct *p)
-{
-	return (task_nice(p) > 0);
-}
-#endif /* !CONFIG_SCHED_ALT */
